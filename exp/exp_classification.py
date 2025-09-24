@@ -223,7 +223,7 @@ class Exp_Classification(Exp_Basic):
             logB_one = - torch.lgamma(torch.tensor([K], device=alpha.device, dtype=alpha.dtype))
             # sum (alpha_i - 1)*(psi(alpha_i) - psi(S))
             digamma_sum = torch.digamma(alpha) - torch.digamma(S)
-            kl = (logB_alpha - logB_one) + ((alpha - 1.0) * digamma_sum).sum(dim=1, keepdim=True)
+            kl = (logB_one - logB_alpha) + ((alpha - 1.0) * digamma_sum).sum(dim=1, keepdim=True)
             kl_total = kl_total + kl
         kl_total = kl_total.mean()
         return kl_total
