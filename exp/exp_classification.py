@@ -1,7 +1,7 @@
 from copy import deepcopy
-from data_provider.data_factory import data_provider
-from exp.exp_basic import Exp_Basic
-from utils.tools import EarlyStopping
+from ..data_provider.data_factory import data_provider
+from .exp_basic import Exp_Basic
+from ..utils.tools import EarlyStopping
 import torch
 import torch.nn as nn
 from torch import optim
@@ -92,5 +92,118 @@ class Exp_Classification(Exp_Basic):
         else:
             self.model.train()
         return total_loss, metrics_dict
+
+    def train(self, setting):
+        train_data, train_loader = self._get_data(flag="TRAIN")
+        vali_data, vali_loader = self._get_data(flag="VAL")
+        test_data, test_loader = self._get_data(flag="TEST")
+
+        path = (
+            "./checkpoints/"
+            + self.args.task_name
+            + "/"
+            + self.args.model_id
+            + "/"
+            + self.args.model
+            + "/"
+            + setting
+            + "/"
+        )
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        time_now = time.time()
+        train_steps = len(train_loader)
+        early_stopping = EarlyStopping(patience=self.args.patience, verbose=True, delta=1e-5)
+        model_optim = self._select_optimizer()
+        criterion = self._select_criterion()
+
+        total_params = 0
+        for name, parameter in self.model.named_parameters():
+            if not parameter.requires_grad:
+                continue
+            total_params += parameter.numel()
+        print(f"Total Trainable Params: {total_params}")
+
+        for epoch in range(self.args.train_epochs):
+            iter_count = 0
+            train_loss = []
+            self.model.train()
+            epoch_time = time.time()
+            for i, (batch_x, label, padding_mask) in enumerate(train_loader):
+                iter_count += 1
+                model_optim.zero_grad()
+
+                batch_x = batch_x.float().to(self.device)
+                padding_mask = padding_mask.float().to(self.device)
+                label = label.to(self.device)
+
+                outputs = self.model(batch_x, padding_mask, None, None)
+                loss = criterion(outputs, label.long())
+                train_loss.append(loss.item())
+
+                if (i + 1) % 100 == 0:
+                    print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
+                    speed = (time.time() - time_now) / iter_count
+                    left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
+                    print("\tspeed: {:.4f}s/iter; left time: {:.4f}s".format(speed, left_time))
+                    iter_count = 0
+                    time_now = time.time()
+
+                loss.backward()
+                nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
+                model_optim.step()
+
+            if hasattr(self, 'swa_model'):
+                self.swa_model.update_parameters(self.model)
+
+            print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
+            train_loss = np.average(train_loss)
+            vali_loss, val_metrics = self.vali(vali_data, vali_loader, criterion)
+            test_loss, test_metrics = self.vali(test_data, test_loader, criterion)
+
+            print(
+                f"Epoch: {epoch + 1}, Steps: {train_steps}, | Train Loss: {train_loss:.5f}\n"
+                f"Validation --- Loss: {vali_loss:.5f}, Acc: {val_metrics['Accuracy']:.5f}, F1: {val_metrics['F1']:.5f}, AUROC: {val_metrics['AUROC']:.5f}, AUPRC: {val_metrics['AUPRC']:.5f}\n"
+                f"Test       --- Loss: {test_loss:.5f}, Acc: {test_metrics['Accuracy']:.5f}, F1: {test_metrics['F1']:.5f}, AUROC: {test_metrics['AUROC']:.5f}, AUPRC: {test_metrics['AUPRC']:.5f}"
+            )
+
+            early_stopping(-val_metrics["F1"], self.swa_model if getattr(self, 'swa', False) else self.model, path)
+            if early_stopping.early_stop:
+                print("Early stopping")
+                break
+
+        best_model_path = os.path.join(path, "checkpoint.pth")
+        if getattr(self, 'swa', False):
+            self.swa_model.load_state_dict(torch.load(best_model_path, map_location='cuda' if self.args.use_gpu else 'cpu'))
+        else:
+            self.model.load_state_dict(torch.load(best_model_path, map_location='cuda' if self.args.use_gpu else 'cpu'))
+        return self.model
+
+    def test(self, setting, test=0):
+        vali_data, vali_loader = self._get_data(flag="VAL")
+        test_data, test_loader = self._get_data(flag="TEST")
+        if test:
+            print("loading model")
+            path = (
+                "./checkpoints/" + self.args.task_name + "/" + self.args.model_id + "/" + self.args.model + "/" + setting + "/"
+            )
+            model_path = os.path.join(path, "checkpoint.pth")
+            if not os.path.exists(model_path):
+                raise Exception("No model found at %s" % model_path)
+            if getattr(self, 'swa', False):
+                self.swa_model.load_state_dict(torch.load(model_path, map_location='cuda' if self.args.use_gpu else 'cpu'))
+            else:
+                self.model.load_state_dict(torch.load(model_path, map_location='cuda' if self.args.use_gpu else 'cpu'))
+
+        criterion = self._select_criterion()
+        vali_loss, val_metrics = self.vali(vali_data, vali_loader, criterion)
+        test_loss, test_metrics = self.vali(test_data, test_loader, criterion)
+
+        print(
+            f"Validation --- Loss: {vali_loss:.5f}, Acc: {val_metrics['Accuracy']:.5f}, F1: {val_metrics['F1']:.5f}, AUROC: {val_metrics['AUROC']:.5f}, AUPRC: {val_metrics['AUPRC']:.5f}\n"
+            f"Test       --- Loss: {test_loss:.5f}, Acc: {test_metrics['Accuracy']:.5f}, F1: {test_metrics['F1']:.5f}, AUROC: {test_metrics['AUROC']:.5f}, AUPRC: {test_metrics['AUPRC']:.5f}"
+        )
+        return
 
 
