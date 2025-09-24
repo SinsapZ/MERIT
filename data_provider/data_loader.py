@@ -31,10 +31,13 @@ class APAVALoader(Dataset):
         filenames.sort()
         if flag == "TRAIN":
             ids = self.train_ids
+            print("train ids:", ids)
         elif flag == "VAL":
             ids = self.val_ids
+            print("val ids:", ids)
         elif flag == "TEST":
             ids = self.test_ids
+            print("test ids:", ids)
         else:
             ids = subject_label[:, 1]
         for j in range(len(filenames)):

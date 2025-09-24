@@ -24,6 +24,7 @@ class EviMR(nn.Module):
     def forward(self, x):
         feat_list = []
         weights = []
+        alphas = []
         for l in range(self.res_num):
             # x[l]: (B, enc_in, d_model) -> feature for fusion
             feat = x[l].permute(0, 2, 1)  # (B, d_model, enc_in)
@@ -32,6 +33,7 @@ class EviMR(nn.Module):
             logits = self.evidence_heads[l](self.drop(pooled))
             evidence = F.softplus(logits) if self.evidence_act == 'softplus' else F.relu(logits)
             alpha = evidence + 1.0
+            alphas.append(alpha)
             S = torch.sum(alpha, dim=1, keepdim=True)
             u = self.num_classes / S
             w = 1.0 - u
@@ -44,6 +46,7 @@ class EviMR(nn.Module):
             pseudo_logits = self.pseudo_head(self.drop(pooled_pseudo))
             pseudo_evidence = F.softplus(pseudo_logits) if self.evidence_act == 'softplus' else F.relu(pseudo_logits)
             pseudo_alpha = pseudo_evidence + 1.0
+            alphas.append(pseudo_alpha)
             pseudo_S = torch.sum(pseudo_alpha, dim=1, keepdim=True)
             pseudo_u = self.num_classes / pseudo_S
             pseudo_w = self.lambda_pseudo * (1.0 - pseudo_u)
@@ -62,6 +65,6 @@ class EviMR(nn.Module):
         feats = torch.stack(feat_list + ([pseudo_feat] if self.use_pseudo else []), dim=-1)
         weights = weights.unsqueeze(1).unsqueeze(1)
         out = torch.sum(feats * weights, dim=-1)
-        return out, []
+        return out, alphas
 
 

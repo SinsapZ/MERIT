@@ -58,9 +58,9 @@ class Exp_Classification(Exp_Basic):
                 padding_mask = padding_mask.float().to(self.device)
                 label = label.to(self.device)
                 if self.swa:
-                    outputs = self.swa_model(batch_x, padding_mask, None, None)
+                    outputs, _ = self.swa_model(batch_x, padding_mask, None, None)
                 else:
-                    outputs = self.model(batch_x, padding_mask, None, None)
+                    outputs, _ = self.model(batch_x, padding_mask, None, None)
                 pred = outputs.detach().cpu()
                 loss = criterion(pred, label.long().cpu())
                 total_loss.append(loss)
@@ -138,8 +138,11 @@ class Exp_Classification(Exp_Basic):
                 padding_mask = padding_mask.float().to(self.device)
                 label = label.to(self.device)
 
-                outputs = self.model(batch_x, padding_mask, None, None)
+                outputs, alphas = self.model(batch_x, padding_mask, None, None)
                 loss = criterion(outputs, label.long())
+                if getattr(self.args, 'use_evi_loss', False):
+                    kl = self._evi_kl_loss(alphas, self.args)
+                    loss = loss + self.args.lambda_evi * kl
                 train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
@@ -164,8 +167,8 @@ class Exp_Classification(Exp_Basic):
 
             print(
                 f"Epoch: {epoch + 1}, Steps: {train_steps}, | Train Loss: {train_loss:.5f}\n"
-                f"Validation --- Loss: {vali_loss:.5f}, Acc: {val_metrics['Accuracy']:.5f}, F1: {val_metrics['F1']:.5f}, AUROC: {val_metrics['AUROC']:.5f}, AUPRC: {val_metrics['AUPRC']:.5f}\n"
-                f"Test       --- Loss: {test_loss:.5f}, Acc: {test_metrics['Accuracy']:.5f}, F1: {test_metrics['F1']:.5f}, AUROC: {test_metrics['AUROC']:.5f}, AUPRC: {test_metrics['AUPRC']:.5f}"
+                f"Validation results --- Loss: {vali_loss:.5f}, Accuracy: {val_metrics['Accuracy']:.5f}, Precision: {val_metrics['Precision']:.5f}, Recall: {val_metrics['Recall']:.5f}, F1: {val_metrics['F1']:.5f}, AUROC: {val_metrics['AUROC']:.5f}, AUPRC: {val_metrics['AUPRC']:.5f}\n"
+                f"Test results --- Loss: {test_loss:.5f}, Accuracy: {test_metrics['Accuracy']:.5f}, Precision: {test_metrics['Precision']:.5f}, Recall: {test_metrics['Recall']:.5f} F1: {test_metrics['F1']:.5f}, AUROC: {test_metrics['AUROC']:.5f}, AUPRC: {test_metrics['AUPRC']:.5f}"
             )
 
             early_stopping(-val_metrics["F1"], self.swa_model if getattr(self, 'swa', False) else self.model, path)
@@ -201,9 +204,28 @@ class Exp_Classification(Exp_Basic):
         test_loss, test_metrics = self.vali(test_data, test_loader, criterion)
 
         print(
-            f"Validation --- Loss: {vali_loss:.5f}, Acc: {val_metrics['Accuracy']:.5f}, F1: {val_metrics['F1']:.5f}, AUROC: {val_metrics['AUROC']:.5f}, AUPRC: {val_metrics['AUPRC']:.5f}\n"
-            f"Test       --- Loss: {test_loss:.5f}, Acc: {test_metrics['Accuracy']:.5f}, F1: {test_metrics['F1']:.5f}, AUROC: {test_metrics['AUROC']:.5f}, AUPRC: {test_metrics['AUPRC']:.5f}"
+            f"Validation results --- Loss: {vali_loss:.5f}, Accuracy: {val_metrics['Accuracy']:.5f}, Precision: {val_metrics['Precision']:.5f}, Recall: {val_metrics['Recall']:.5f}, F1: {val_metrics['F1']:.5f}, AUROC: {val_metrics['AUROC']:.5f}, AUPRC: {val_metrics['AUPRC']:.5f}\n"
+            f"Test results --- Loss: {test_loss:.5f}, Accuracy: {test_metrics['Accuracy']:.5f}, Precision: {test_metrics['Precision']:.5f}, Recall: {test_metrics['Recall']:.5f}, F1: {test_metrics['F1']:.5f}, AUROC: {test_metrics['AUROC']:.5f}, AUPRC: {test_metrics['AUPRC']:.5f}"
         )
         return
+
+    def _evi_kl_loss(self, alphas, args):
+        # KL( Dir(alpha) || Dir(1) ), sum over views, mean over batch
+        # Dirichlet KL to uniform prior: use closed-form
+        import torch
+        import torch.nn.functional as F
+        kl_total = 0.0
+        for alpha in alphas:
+            S = torch.sum(alpha, dim=1, keepdim=True)
+            K = alpha.shape[1]
+            # log Beta functions
+            logB_alpha = torch.lgamma(alpha).sum(dim=1, keepdim=True) - torch.lgamma(S)
+            logB_one = - torch.lgamma(torch.tensor([K], device=alpha.device, dtype=alpha.dtype))
+            # sum (alpha_i - 1)*(psi(alpha_i) - psi(S))
+            digamma_sum = torch.digamma(alpha) - torch.digamma(S)
+            kl = (logB_alpha - logB_one) + ((alpha - 1.0) * digamma_sum).sum(dim=1, keepdim=True)
+            kl_total = kl_total + kl
+        kl_total = kl_total.mean()
+        return kl_total
 
 

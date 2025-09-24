@@ -114,9 +114,9 @@ class Model(nn.Module):
             enc_out_2 = [torch.zeros((multi_res_data[l].shape[0], self.enc_in, self.d_model), device=multi_res_data[l].device, dtype=multi_res_data[l].dtype) for l in range(self.res_num)]
         data_enc = [enc_out_1[l] + enc_out_2[l] for l in range(self.res_num)]
         enc_out, attns = self.encoder(data_enc, attn_mask=None)
-        output, adjacency_matrix_list = self.evimr(enc_out)
+        output, alphas = self.evimr(enc_out)
         output = output.reshape(B, -1)
         output = self.projection(output)
-        return output
+        return output, alphas
 
 
