@@ -38,6 +38,7 @@ if __name__ == "__main__":
     parser.add_argument("--no_diff", action="store_true", default=False, help="disable difference attention branch")
     parser.add_argument("--use_evi_loss", action="store_true", default=False, help="add evidential KL regularization to prior")
     parser.add_argument("--lambda_evi", type=float, default=1.0, help="weight for evidential KL to uniform prior")
+    parser.add_argument("--use_ds", action="store_true", default=False, help="strict ETMC-style DS fusion over Dirichlet alphas")
     parser.add_argument("--num_workers", type=int, default=10)
     parser.add_argument("--itr", type=int, default=1)
     parser.add_argument("--train_epochs", type=int, default=10)

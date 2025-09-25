@@ -96,6 +96,7 @@ class Model(nn.Module):
             lambda_pseudo=getattr(configs, 'lambda_pseudo', 1.0),
             evidence_act=getattr(configs, 'evidence_act', 'softplus'),
             evidence_dropout=getattr(configs, 'evidence_dropout', 0.0),
+            use_ds=getattr(configs, 'use_ds', False),
         )
 
         # step 5: projection
@@ -115,8 +116,15 @@ class Model(nn.Module):
         data_enc = [enc_out_1[l] + enc_out_2[l] for l in range(self.res_num)]
         enc_out, attns = self.encoder(data_enc, attn_mask=None)
         output, alphas = self.evimr(enc_out)
-        output = output.reshape(B, -1)
-        output = self.projection(output)
-        return output, alphas
+        if getattr(self.evimr, 'use_ds', False):
+            # output is fused alpha_a (B, K). Convert to logits via log p
+            p = output / torch.sum(output, dim=1, keepdim=True)
+            eps = 1e-8
+            logits = torch.log(torch.clamp(p, min=eps))
+            return logits, alphas
+        else:
+            output = output.reshape(B, -1)
+            output = self.projection(output)
+            return output, alphas
 
 

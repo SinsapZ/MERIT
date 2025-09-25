@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class EviMR(nn.Module):
-    def __init__(self, enc_in, d_model, dropout, nodedim, res_len, num_classes, resolution_list, use_pseudo=True, agg='evi', lambda_pseudo=1.0, evidence_act='softplus', evidence_dropout=0.0):
+    def __init__(self, enc_in, d_model, dropout, nodedim, res_len, num_classes, resolution_list, use_pseudo=True, agg='evi', lambda_pseudo=1.0, evidence_act='softplus', evidence_dropout=0.0, use_ds=False):
         super(EviMR, self).__init__()
         self.resolution_list = list(map(int, resolution_list)) if isinstance(resolution_list, (list, tuple)) else list(map(int, resolution_list.split(',')))
         self.res_num = len(self.resolution_list)
@@ -15,6 +15,7 @@ class EviMR(nn.Module):
         self.lambda_pseudo = lambda_pseudo
         self.evidence_act = evidence_act
         self.drop = nn.Dropout(evidence_dropout)
+        self.use_ds = use_ds
         # per-resolution evidence head (no graph)
         self.evidence_heads = nn.ModuleList([nn.Linear(d_model, self.num_classes) for _ in range(self.res_num)])
         # pseudo view modules
@@ -54,17 +55,45 @@ class EviMR(nn.Module):
             weights = torch.cat(weights + [pseudo_w], dim=1)
         else:
             weights = torch.cat(weights, dim=1)
-        weights = torch.clamp(weights, min=1e-6)
-        if self.agg == 'evi':
-            weights = weights / torch.sum(weights, dim=1, keepdim=True)
+        if self.use_ds:
+            alpha_a = self._ds_combin(alphas)
+            return alpha_a, alphas
         else:
-            # mean aggregation
-            weights = torch.full_like(weights, 1.0 / weights.shape[1])
+            weights = torch.clamp(weights, min=1e-6)
+            if self.agg == 'evi':
+                weights = weights / torch.sum(weights, dim=1, keepdim=True)
+            else:
+                weights = torch.full_like(weights, 1.0 / weights.shape[1])
+            feats = torch.stack(feat_list + ([pseudo_feat] if self.use_pseudo else []), dim=-1)
+            weights = weights.unsqueeze(1).unsqueeze(1)
+            out = torch.sum(feats * weights, dim=-1)
+            return out, alphas
 
-        # aggregate features including pseudo view
-        feats = torch.stack(feat_list + ([pseudo_feat] if self.use_pseudo else []), dim=-1)
-        weights = weights.unsqueeze(1).unsqueeze(1)
-        out = torch.sum(feats * weights, dim=-1)
-        return out, alphas
+    def _ds_combin(self, alpha_list):
+        def ds_two(alpha1, alpha2):
+            S0 = torch.sum(alpha1, dim=1, keepdim=True)
+            S1 = torch.sum(alpha2, dim=1, keepdim=True)
+            E0 = alpha1 - 1.0
+            E1 = alpha2 - 1.0
+            b0 = E0 / S0.expand_as(E0)
+            b1 = E1 / S1.expand_as(E1)
+            u0 = self.num_classes / S0
+            u1 = self.num_classes / S1
+            bb = torch.bmm(b0.view(-1, self.num_classes, 1), b1.view(-1, 1, self.num_classes))
+            bu = b0 * u1.expand_as(b0)
+            ub = b1 * u0.expand_as(b0)
+            bb_sum = torch.sum(bb, dim=(1, 2))
+            bb_diag = torch.diagonal(bb, dim1=-2, dim2=-1).sum(-1)
+            K = bb_sum - bb_diag
+            b_a = (b0 * b1 + bu + ub) / (1.0 - K).view(-1, 1).expand_as(b0)
+            u_a = (u0 * u1) / (1.0 - K).view(-1, 1).expand_as(u0)
+            S_a = self.num_classes / u_a
+            e_a = b_a * S_a.expand_as(b_a)
+            alpha_a = e_a + 1.0
+            return alpha_a
+        alpha_a = alpha_list[0]
+        for v in range(1, len(alpha_list)):
+            alpha_a = ds_two(alpha_a, alpha_list[v])
+        return alpha_a
 
 
