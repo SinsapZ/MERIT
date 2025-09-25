@@ -32,7 +32,7 @@ for LBD in "${LAMBDA_EVI_LIST[@]}"; do
     for LP in "${LAMBDA_PSEUDO_LIST[@]}"; do
       TAG="lbd${LBD}_lr${LR}_lp${LP}"
       echo "[RUN] ${TAG}"
-      CMD=(python -m MERIT.MERIT.run \
+      CMD=(python -m MERIT.run \
         --model ${MODEL} \
         --data ${DATA} \
         --root_path ${DATA_ROOT} \
