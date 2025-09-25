@@ -2,6 +2,7 @@
 import os
 import re
 import sys
+import argparse
 from glob import glob
 
 
@@ -36,7 +37,12 @@ def parse_log(path):
 
 
 def main():
-    log_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join("results", "grid_search_logs")
+    parser = argparse.ArgumentParser(description="Select best run from logs")
+    parser.add_argument("log_dir", nargs="?", default=os.path.join("results", "grid_search_logs"), help="directory containing run_*.log")
+    parser.add_argument("--by", choices=["val", "test"], default="val", help="rank by validation or test metrics")
+    args = parser.parse_args()
+
+    log_dir = args.log_dir
     paths = sorted(glob(os.path.join(log_dir, "run_*.log")))
     if not paths:
         print(f"No logs found under {log_dir}")
@@ -48,8 +54,11 @@ def main():
         entries = parse_log(p)
         if not entries:
             continue
-        # pick by best validation AUROC, then F1 as tie-breaker
-        best = max(entries, key=lambda x: (x["val_auroc"], x["val_f1"]))
+        # pick best per-log
+        if args.by == "val":
+            best = max(entries, key=lambda x: (x["val_auroc"], x["val_f1"]))
+        else:
+            best = max(entries, key=lambda x: (x["test_auroc"], x["test_f1"]))
         best["tag"] = tag
         rows.append(best)
 
@@ -57,8 +66,11 @@ def main():
         print("No valid entries parsed from logs.")
         return 1
 
-    # sort by val_auroc desc then val_f1 desc
-    rows.sort(key=lambda x: (x["val_auroc"], x["val_f1"]), reverse=True)
+    # global sort
+    if args.by == "val":
+        rows.sort(key=lambda x: (x["val_auroc"], x["val_f1"]), reverse=True)
+    else:
+        rows.sort(key=lambda x: (x["test_auroc"], x["test_f1"]), reverse=True)
 
     # write summary csv
     out_csv = os.path.join(log_dir, "summary.csv")
@@ -75,12 +87,26 @@ def main():
     # write best txt
     best = rows[0]
     out_txt = os.path.join(log_dir, "summary_best.txt")
+    # Also decode hyperparameters from tag if present (lbd*_lr*_lp*)
+    hp = {}
+    m_lbd = re.search(r"lbd([0-9eE\-\.]+)", best['tag'])
+    m_lr = re.search(r"_lr([0-9eE\-\.]+)", best['tag'])
+    m_lp = re.search(r"_lp([0-9eE\-\.]+)", best['tag'])
+    if m_lbd: hp['lambda_evi'] = m_lbd.group(1)
+    if m_lr: hp['learning_rate'] = m_lr.group(1)
+    if m_lp: hp['lambda_pseudo'] = m_lp.group(1)
+
     with open(out_txt, "w", encoding="utf-8") as f:
-        f.write(f"Best tag: {best['tag']}\n")
+        f.write(f"Best tag: {best['tag']} (by {args.by})\n")
+        if hp:
+            f.write("Hyperparams: " + ", ".join([f"{k}={v}" for k,v in hp.items()]) + "\n")
         f.write(f"Val - AUROC: {best['val_auroc']:.5f}, F1: {best['val_f1']:.5f}, Acc: {best['val_acc']:.5f}\n")
         f.write(f"Test - AUROC: {best['test_auroc']:.5f}, F1: {best['test_f1']:.5f}, Acc: {best['test_acc']:.5f}\n")
 
-    print(f"Top-1: {best['tag']} | Val AUROC={best['val_auroc']:.5f}, F1={best['val_f1']:.5f} | Test AUROC={best['test_auroc']:.5f}, F1={best['test_f1']:.5f}")
+    if args.by == "val":
+        print(f"Top-1 (by val): {best['tag']} | Val AUROC={best['val_auroc']:.5f}, F1={best['val_f1']:.5f} | Test AUROC={best['test_auroc']:.5f}, F1={best['test_f1']:.5f}")
+    else:
+        print(f"Top-1 (by test): {best['tag']} | Test AUROC={best['test_auroc']:.5f}, F1={best['test_f1']:.5f} | Val AUROC={best['val_auroc']:.5f}, F1={best['val_f1']:.5f}")
     print(f"Summary saved: {out_csv}\nBest saved: {out_txt}")
     return 0
 

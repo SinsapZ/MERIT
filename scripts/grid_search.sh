@@ -15,9 +15,10 @@ DATA_ROOT=${2:-"${WS_ROOT}/MERIT/APAVA"}
 cd "$WS_ROOT"
 
 # Search spaces
-LAMBDA_EVI_LIST=(0.05 0.10 0.20 0.30 0.50)
+# Tuned ranges (5×5×3)
+LAMBDA_EVI_LIST=(0.15 0.20 0.30 0.40 0.50)
 LR_LIST=(1e-4 7e-5 5e-5 3e-5 2e-5)
-LAMBDA_PSEUDO_LIST=(0.5 0.8 1.0)
+LAMBDA_PSEUDO_LIST=(0.3 0.5 0.8)
 
 # Fixed settings (align with your best-known config)
 EVIDENCE_DROPOUT=0.2
@@ -32,7 +33,7 @@ for LBD in "${LAMBDA_EVI_LIST[@]}"; do
     for LP in "${LAMBDA_PSEUDO_LIST[@]}"; do
       TAG="lbd${LBD}_lr${LR}_lp${LP}"
       echo "[RUN] ${TAG}"
-      CMD=(python -m MERIT.run \
+      CMD=(python -m MERIT.MERIT.run \
         --model ${MODEL} \
         --data ${DATA} \
         --root_path ${DATA_ROOT} \
