@@ -40,6 +40,13 @@ def main():
     parser = argparse.ArgumentParser(description="Select best run from logs")
     parser.add_argument("log_dir", nargs="?", default=os.path.join("results", "grid_search_logs"), help="directory containing run_*.log")
     parser.add_argument("--by", choices=["val", "test"], default="val", help="rank by validation or test metrics")
+    parser.add_argument("--score", choices=["single", "composite"], default="single", help="rank by single metric (AUROC) or composite score")
+    parser.add_argument("--w_auroc", type=float, default=0.4, help="weight for AUROC in composite score")
+    parser.add_argument("--w_auprc", type=float, default=0.3, help="weight for AUPRC in composite score")
+    parser.add_argument("--w_f1", type=float, default=0.2, help="weight for F1 in composite score")
+    parser.add_argument("--w_acc", type=float, default=0.1, help="weight for Accuracy in composite score")
+    parser.add_argument("--min_acc", type=float, default=0.0, help="minimum Accuracy constraint (0~1), filter out runs below")
+    parser.add_argument("--min_f1", type=float, default=0.0, help="minimum F1 constraint (0~1), filter out runs below")
     args = parser.parse_args()
 
     log_dir = args.log_dir
@@ -55,10 +62,28 @@ def main():
         if not entries:
             continue
         # pick best per-log
-        if args.by == "val":
-            best = max(entries, key=lambda x: (x["val_auroc"], x["val_f1"]))
-        else:
-            best = max(entries, key=lambda x: (x["test_auroc"], x["test_f1"]))
+        def score_fn(e):
+            if args.by == "val":
+                acc, f1, auroc, auprc = e["val_acc"], e["val_f1"], e["val_auroc"], e["val_auprc"]
+            else:
+                acc, f1, auroc, auprc = e["test_acc"], e["test_f1"], e["test_auroc"], e["test_auprc"]
+            if args.score == "single":
+                return (auroc, f1)
+            # composite
+            comp = (
+                args.w_auroc * auroc +
+                args.w_auprc * auprc +
+                args.w_f1 * f1 +
+                args.w_acc * acc
+            )
+            return (comp, auroc)
+
+        # optional constraints filter
+        cand = [e for e in entries if (e["val_acc"] >= args.min_acc and e["val_f1"] >= args.min_f1)] if args.by == "val" else \
+               [e for e in entries if (e["test_acc"] >= args.min_acc and e["test_f1"] >= args.min_f1)]
+        if not cand:
+            cand = entries
+        best = max(cand, key=score_fn)
         best["tag"] = tag
         rows.append(best)
 
@@ -67,10 +92,22 @@ def main():
         return 1
 
     # global sort
-    if args.by == "val":
-        rows.sort(key=lambda x: (x["val_auroc"], x["val_f1"]), reverse=True)
-    else:
-        rows.sort(key=lambda x: (x["test_auroc"], x["test_f1"]), reverse=True)
+    def row_score_key(r):
+        if args.by == "val":
+            acc, f1, auroc, auprc = r["val_acc"], r["val_f1"], r["val_auroc"], r["val_auprc"]
+        else:
+            acc, f1, auroc, auprc = r["test_acc"], r["test_f1"], r["test_auroc"], r["test_auprc"]
+        if args.score == "single":
+            return (auroc, f1)
+        comp = (
+            args.w_auroc * auroc +
+            args.w_auprc * auprc +
+            args.w_f1 * f1 +
+            args.w_acc * acc
+        )
+        return (comp, auroc)
+
+    rows.sort(key=row_score_key, reverse=True)
 
     # write summary csv
     out_csv = os.path.join(log_dir, "summary.csv")
@@ -104,9 +141,9 @@ def main():
         f.write(f"Test - AUROC: {best['test_auroc']:.5f}, F1: {best['test_f1']:.5f}, Acc: {best['test_acc']:.5f}\n")
 
     if args.by == "val":
-        print(f"Top-1 (by val): {best['tag']} | Val AUROC={best['val_auroc']:.5f}, F1={best['val_f1']:.5f} | Test AUROC={best['test_auroc']:.5f}, F1={best['test_f1']:.5f}")
+        print(f"Top-1 (by val/{args.score}): {best['tag']} | Val AUROC={best['val_auroc']:.5f}, F1={best['val_f1']:.5f} | Test AUROC={best['test_auroc']:.5f}, F1={best['test_f1']:.5f}")
     else:
-        print(f"Top-1 (by test): {best['tag']} | Test AUROC={best['test_auroc']:.5f}, F1={best['test_f1']:.5f} | Val AUROC={best['val_auroc']:.5f}, F1={best['val_f1']:.5f}")
+        print(f"Top-1 (by test/{args.score}): {best['tag']} | Test AUROC={best['test_auroc']:.5f}, F1={best['test_f1']:.5f} | Val AUROC={best['val_auroc']:.5f}, F1={best['val_f1']:.5f}")
     print(f"Summary saved: {out_csv}\nBest saved: {out_txt}")
     return 0
 
