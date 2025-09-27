@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 import csv
+import re
 
 
 def run_once(base_cmd, env=None):
@@ -15,6 +16,27 @@ def run_once(base_cmd, env=None):
         return proc.returncode, proc.stdout, dur
     except Exception as e:
         return 1, str(e), 0.0
+
+
+def parse_metrics(txt):
+    # Parse Validation and Test metrics from exp output
+    # Expected lines:
+    #   Validation results --- Loss: <f>, Accuracy: <f>, Precision: <f>, Recall: <f>, F1: <f>, AUROC: <f>, AUPRC: <f>
+    #   Test results --- Loss: <f>, Accuracy: <f>, Precision: <f>, Recall: <f>, F1: <f>, AUROC: <f>, AUPRC: <f>
+    pattern = r"(Validation|Test) results --- Loss: ([0-9\.]+), Accuracy: ([0-9\.]+), Precision: ([0-9\.]+), Recall: ([0-9\.]+), F1: ([0-9\.]+), AUROC: ([0-9\.]+), AUPRC: ([0-9\.]+)"
+    results = {"val": {}, "test": {}}
+    for kind, loss, acc, prec, rec, f1, auroc, auprc in re.findall(pattern, txt):
+        target = "val" if kind == "Validation" else "test"
+        results[target] = {
+            "loss": float(loss),
+            "acc": float(acc),
+            "prec": float(prec),
+            "rec": float(rec),
+            "f1": float(f1),
+            "auroc": float(auroc),
+            "auprc": float(auprc),
+        }
+    return results
 
 
 def main():
@@ -40,6 +62,10 @@ def main():
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--train_epochs", type=int, default=10)
     parser.add_argument("--patience", type=int, default=3)
+    # scoring weights
+    parser.add_argument("--w_f1", type=float, default=0.5, help="weight of validation F1 in selection score")
+    parser.add_argument("--w_acc", type=float, default=0.3, help="weight of validation ACC in selection score")
+    parser.add_argument("--w_auroc", type=float, default=0.2, help="weight of validation AUROC in selection score")
 
     args = parser.parse_args()
 
@@ -61,9 +87,11 @@ def main():
         writer = csv.writer(f)
         writer.writerow([
             'lr', 'lambda_evi', 'lambda_pseudo', 'lambda_fuse', 'lambda_view', 'lambda_pseudo_loss', 'annealing_epoch',
-            'return_code', 'duration_sec'
+            'return_code', 'duration_sec',
+            'val_loss', 'val_acc', 'val_prec', 'val_rec', 'val_f1', 'val_auroc', 'val_auprc', 'val_score',
+            'test_loss', 'test_acc', 'test_prec', 'test_rec', 'test_f1', 'test_auroc', 'test_auprc',
         ])
-
+        best = {"score": -1.0, "row": None}
         for lr, lbd_evi, lbd_pseudo, lbd_fuse, lbd_view, lbd_pseudo_loss, anneal in combos:
             cmd = [
                 sys.executable, '-m', 'MERIT.run',
@@ -87,7 +115,26 @@ def main():
             ]
 
             code, out, dur = run_once(cmd, env=os.environ.copy())
-            writer.writerow([lr, lbd_evi, lbd_pseudo, lbd_fuse, lbd_view, lbd_pseudo_loss, anneal, code, f"{dur:.2f}"])
+            metrics = parse_metrics(out)
+            val = metrics.get('val', {})
+            test = metrics.get('test', {})
+            # compute validation composite score
+            try:
+                val_score = (
+                    args.w_f1 * float(val.get('f1', 0.0)) +
+                    args.w_acc * float(val.get('acc', 0.0)) +
+                    args.w_auroc * float(val.get('auroc', 0.0))
+                )
+            except Exception:
+                val_score = -1.0
+
+            row = [
+                lr, lbd_evi, lbd_pseudo, lbd_fuse, lbd_view, lbd_pseudo_loss, anneal,
+                code, f"{dur:.2f}",
+                val.get('loss', ''), val.get('acc', ''), val.get('prec', ''), val.get('rec', ''), val.get('f1', ''), val.get('auroc', ''), val.get('auprc', ''), f"{val_score:.6f}",
+                test.get('loss', ''), test.get('acc', ''), test.get('prec', ''), test.get('rec', ''), test.get('f1', ''), test.get('auroc', ''), test.get('auprc', ''),
+            ]
+            writer.writerow(row)
             f.flush()
             print('\n========== CMD =========')
             print(' '.join(cmd))
@@ -95,6 +142,20 @@ def main():
             print(f'return={code}, duration={dur:.2f}s')
             print('========== LOG =========')
             print(out)
+            # Track best by validation F1
+            if code == 0 and val_score > best['score']:
+                best = {"score": val_score, "row": row}
+
+    if best['row'] is not None:
+        print('\n========== BEST (by Validation F1) =========')
+        headers = [
+            'lr', 'lambda_evi', 'lambda_pseudo', 'lambda_fuse', 'lambda_view', 'lambda_pseudo_loss', 'annealing_epoch',
+            'return_code', 'duration_sec',
+            'val_loss', 'val_acc', 'val_prec', 'val_rec', 'val_f1', 'val_auroc', 'val_auprc', 'val_score',
+            'test_loss', 'test_acc', 'test_prec', 'test_rec', 'test_f1', 'test_auroc', 'test_auprc',
+        ]
+        for h, v in zip(headers, best['row']):
+            print(f"{h}: {v}")
 
 
 if __name__ == '__main__':
