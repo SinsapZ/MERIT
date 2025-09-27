@@ -121,7 +121,8 @@ class Model(nn.Module):
             p = output / torch.sum(output, dim=1, keepdim=True)
             eps = 1e-8
             logits = torch.log(torch.clamp(p, min=eps))
-            return logits, alphas
+            # Also include fused alpha at the head of the list for EDL-KL on both fused and per-view alphas
+            return logits, [output] + alphas
         else:
             output = output.reshape(B, -1)
             output = self.projection(output)
