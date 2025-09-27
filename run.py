@@ -43,6 +43,7 @@ if __name__ == "__main__":
     parser.add_argument("--lambda_fuse", type=float, default=1.0, help="weight for fused alpha loss")
     parser.add_argument("--lambda_view", type=float, default=1.0, help="weight for per-view alpha loss")
     parser.add_argument("--lambda_pseudo_loss", type=float, default=1.0, help="weight for pseudo-view alpha loss")
+    parser.add_argument("--annealing_epoch", type=int, default=10, help="annealing steps for evidential KL")
     parser.add_argument("--num_workers", type=int, default=10)
     parser.add_argument("--itr", type=int, default=1)
     parser.add_argument("--train_epochs", type=int, default=10)
