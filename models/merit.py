@@ -159,11 +159,23 @@ class Model(nn.Module):
         pred = torch.argmax(fused_alpha, dim=1)
         return pred, fused_alpha, alphas
 
-    def evidential_loss(self, target, fused_alpha, alphas, global_step, annealing_epoch, num_classes):
-        # ETMC-style: supervise fused alpha and each per-resolution alpha
-        loss = ce_loss_edl(target, fused_alpha, num_classes, global_step, annealing_epoch)
-        for alpha in alphas:
-            loss = loss + ce_loss_edl(target, alpha, num_classes, global_step, annealing_epoch)
+    def evidential_loss(self, target, fused_alpha, alphas, global_step, annealing_epoch, num_classes,
+                        lambda_fuse=1.0, lambda_view=1.0, lambda_pseudo_loss=1.0):
+        """ETMC-style evidential loss with adjustable weights for fused, per-view and pseudo-view alphas.
+        - fused_alpha: (B, K)
+        - alphas: list of per-view alphas; if pseudo-view启用，最后一个为伪视图 alpha
+        """
+        loss = lambda_fuse * ce_loss_edl(target, fused_alpha, num_classes, global_step, annealing_epoch)
+        if len(alphas) > 0:
+            # 如果存在伪视图，视作 alphas 的最后一个
+            if len(alphas) >= 2 and hasattr(self, 'evimr') and getattr(self.evimr, 'use_pseudo', False):
+                *view_alphas, pseudo_alpha = alphas
+            else:
+                view_alphas, pseudo_alpha = alphas, None
+            for alpha in view_alphas:
+                loss = loss + lambda_view * ce_loss_edl(target, alpha, num_classes, global_step, annealing_epoch)
+            if pseudo_alpha is not None:
+                loss = loss + lambda_pseudo_loss * ce_loss_edl(target, pseudo_alpha, num_classes, global_step, annealing_epoch)
         return loss
 
 

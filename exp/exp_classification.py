@@ -68,6 +68,9 @@ class Exp_Classification(Exp_Basic):
                     loss = self.model.evidential_loss(
                         label.long(), fused_alpha, alphas, global_step=10**9,
                         annealing_epoch=getattr(self.args, 'annealing_epoch', 10), num_classes=self.args.num_class,
+                        lambda_fuse=getattr(self.args, 'lambda_fuse', 1.0),
+                        lambda_view=getattr(self.args, 'lambda_view', 1.0),
+                        lambda_pseudo_loss=getattr(self.args, 'lambda_pseudo_loss', 1.0),
                     )
                     total_loss.append(loss.item())
                     preds.append(fused_alpha.detach())
@@ -162,6 +165,9 @@ class Exp_Classification(Exp_Basic):
                         label.long(), outputs, alphas,
                         global_step=epoch, annealing_epoch=getattr(self.args, 'annealing_epoch', 10),
                         num_classes=self.args.num_class,
+                        lambda_fuse=getattr(self.args, 'lambda_fuse', 1.0),
+                        lambda_view=getattr(self.args, 'lambda_view', 1.0),
+                        lambda_pseudo_loss=getattr(self.args, 'lambda_pseudo_loss', 1.0),
                     )
                 else:
                     loss = criterion(outputs, label.long())
