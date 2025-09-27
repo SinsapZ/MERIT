@@ -41,8 +41,12 @@ class Exp_Classification(Exp_Basic):
         return model_optim
 
     def _select_criterion(self):
-        criterion = nn.CrossEntropyLoss()
-        return criterion
+        # DS 模式下，模型前向返回 fused alpha，不使用 NLLLoss；
+        # 非 DS 模式返回未归一化 logits，使用 CrossEntropyLoss。
+        if getattr(self.args, 'use_ds', False):
+            return None
+        else:
+            return nn.CrossEntropyLoss()
 
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
@@ -57,19 +61,32 @@ class Exp_Classification(Exp_Basic):
                 batch_x = batch_x.float().to(self.device)
                 padding_mask = padding_mask.float().to(self.device)
                 label = label.to(self.device)
-                if self.swa:
-                    outputs, _ = self.swa_model(batch_x, padding_mask, None, None)
+                if getattr(self.args, 'use_ds', False):
+                    outputs, alphas = (self.swa_model if self.swa else self.model)(batch_x, padding_mask, None, None)
+                    fused_alpha = outputs
+                    # 验证集损失：使用最大退火系数
+                    loss = self.model.evidential_loss(
+                        label.long(), fused_alpha, alphas, global_step=10**9,
+                        annealing_epoch=getattr(self.args, 'annealing_epoch', 10), num_classes=self.args.num_class,
+                    )
+                    total_loss.append(loss.item())
+                    preds.append(fused_alpha.detach())
+                    trues.append(label)
                 else:
-                    outputs, _ = self.model(batch_x, padding_mask, None, None)
-                pred = outputs.detach().cpu()
-                loss = criterion(pred, label.long().cpu())
-                total_loss.append(loss)
-                preds.append(outputs.detach())
-                trues.append(label)
+                    outputs, _ = (self.swa_model if self.swa else self.model)(batch_x, padding_mask, None, None)
+                    pred = outputs.detach().cpu()
+                    loss = criterion(pred, label.long().cpu())
+                    total_loss.append(loss)
+                    preds.append(outputs.detach())
+                    trues.append(label)
         total_loss = np.average(total_loss)
         preds = torch.cat(preds, 0)
         trues = torch.cat(trues, 0)
-        probs = torch.nn.functional.softmax(preds)
+        if getattr(self.args, 'use_ds', False):
+            # alpha -> p = alpha / sum(alpha)
+            probs = preds / torch.sum(preds, dim=1, keepdim=True)
+        else:
+            probs = torch.nn.functional.softmax(preds)
         trues_onehot = (
             torch.nn.functional.one_hot(
                 trues.reshape(-1,).to(torch.long),
@@ -139,10 +156,18 @@ class Exp_Classification(Exp_Basic):
                 label = label.to(self.device)
 
                 outputs, alphas = self.model(batch_x, padding_mask, None, None)
-                loss = criterion(outputs, label.long())
-                if getattr(self.args, 'use_evi_loss', False):
-                    kl = self._evi_kl_loss(alphas, self.args)
-                    loss = loss + self.args.lambda_evi * kl
+                if getattr(self.args, 'use_ds', False):
+                    # ETMC 风格 evidential 损失：监督 fused 与各分辨率 alpha
+                    loss = self.model.evidential_loss(
+                        label.long(), outputs, alphas,
+                        global_step=epoch, annealing_epoch=getattr(self.args, 'annealing_epoch', 10),
+                        num_classes=self.args.num_class,
+                    )
+                else:
+                    loss = criterion(outputs, label.long())
+                    if getattr(self.args, 'use_evi_loss', False):
+                        kl = self._evi_kl_loss(alphas, self.args)
+                        loss = loss + self.args.lambda_evi * kl
                 train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:

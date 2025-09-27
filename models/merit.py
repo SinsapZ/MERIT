@@ -1,10 +1,36 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from ..layers.embed import MultiResolutionData, FrequencyEmbedding
 from ..layers.encdec import Encoder, EncoderLayer
 from ..layers.self_attention import FormerLayer, DifferenceFormerLayer
 from ..layers.difference import DifferenceDataEmb, DataRestoration
 from ..layers.evi_mr import EviMR
+
+
+# ===== ETMC-style evidential loss (KL with annealing) =====
+def _KL(alpha, c):
+    device = alpha.device
+    beta = torch.ones((1, c), device=device)
+    S_alpha = torch.sum(alpha, dim=1, keepdim=True)
+    S_beta = torch.sum(beta, dim=1, keepdim=True)
+    lnB = torch.lgamma(S_alpha) - torch.sum(torch.lgamma(alpha), dim=1, keepdim=True)
+    lnB_uni = torch.sum(torch.lgamma(beta), dim=1, keepdim=True) - torch.lgamma(S_beta)
+    dg0 = torch.digamma(S_alpha)
+    dg1 = torch.digamma(alpha)
+    kl = torch.sum((alpha - beta) * (dg1 - dg0), dim=1, keepdim=True) + lnB + lnB_uni
+    return kl
+
+
+def ce_loss_edl(p, alpha, c, global_step, annealing_step):
+    S = torch.sum(alpha, dim=1, keepdim=True)
+    E = alpha - 1.0
+    label = F.one_hot(p, num_classes=c)
+    A = torch.sum(label * (torch.digamma(S) - torch.digamma(alpha)), dim=1, keepdim=True)
+    annealing_coef = min(1.0, float(global_step) / float(max(1, annealing_step)))
+    alp = E * (1.0 - label) + 1.0
+    B = annealing_coef * _KL(alp, c)
+    return torch.mean(A + B)
 
 
 class Model(nn.Module):
@@ -96,7 +122,7 @@ class Model(nn.Module):
             lambda_pseudo=getattr(configs, 'lambda_pseudo', 1.0),
             evidence_act=getattr(configs, 'evidence_act', 'softplus'),
             evidence_dropout=getattr(configs, 'evidence_dropout', 0.0),
-            use_ds=getattr(configs, 'use_ds', False),
+            use_ds=getattr(configs, 'use_ds', True),
         )
 
         # step 5: projection
@@ -117,15 +143,27 @@ class Model(nn.Module):
         enc_out, attns = self.encoder(data_enc, attn_mask=None)
         output, alphas = self.evimr(enc_out)
         if getattr(self.evimr, 'use_ds', False):
-            # output is fused alpha_a (B, K). Convert to logits via log p
-            p = output / torch.sum(output, dim=1, keepdim=True)
-            eps = 1e-8
-            logits = torch.log(torch.clamp(p, min=eps))
-            # Also include fused alpha at the head of the list for EDL-KL on both fused and per-view alphas
-            return logits, [output] + alphas
+            # Return fused alpha and per-resolution alphas for evidential losses
+            return output, alphas
         else:
             output = output.reshape(B, -1)
             output = self.projection(output)
             return output, alphas
+
+    def classify(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
+        # Forward pass to obtain alpha from DS fusion
+        fused_alpha, alphas = self.forward(x_enc, x_mark_enc, x_dec, x_mark_dec)
+        if not getattr(self.evimr, 'use_ds', False):
+            raise ValueError('classify() requires use_ds=True to output alpha')
+        # Predict by argmax over alpha
+        pred = torch.argmax(fused_alpha, dim=1)
+        return pred, fused_alpha, alphas
+
+    def evidential_loss(self, target, fused_alpha, alphas, global_step, annealing_epoch, num_classes):
+        # ETMC-style: supervise fused alpha and each per-resolution alpha
+        loss = ce_loss_edl(target, fused_alpha, num_classes, global_step, annealing_epoch)
+        for alpha in alphas:
+            loss = loss + ce_loss_edl(target, alpha, num_classes, global_step, annealing_epoch)
+        return loss
 
 

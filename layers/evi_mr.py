@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class EviMR(nn.Module):
-    def __init__(self, enc_in, d_model, dropout, nodedim, res_len, num_classes, resolution_list, use_pseudo=True, agg='evi', lambda_pseudo=1.0, evidence_act='softplus', evidence_dropout=0.0, use_ds=False):
+    def __init__(self, enc_in, d_model, dropout, nodedim, res_len, num_classes, resolution_list, use_pseudo=True, agg='evi', lambda_pseudo=1.0, evidence_act='softplus', evidence_dropout=0.0, use_ds=True):
         super(EviMR, self).__init__()
         self.resolution_list = list(map(int, resolution_list)) if isinstance(resolution_list, (list, tuple)) else list(map(int, resolution_list.split(',')))
         self.res_num = len(self.resolution_list)
@@ -56,6 +56,7 @@ class EviMR(nn.Module):
         else:
             weights = torch.cat(weights, dim=1)
         if self.use_ds:
+            # ETMC-style evidential DS fusion over alphas (including optional pseudo alpha)
             alpha_a = self._ds_combin(alphas)
             return alpha_a, alphas
         else:
