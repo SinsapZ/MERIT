@@ -48,8 +48,9 @@ class APAVALoader(Dataset):
             trial_label = subject_label[j]
             path = data_path + filenames[j]
             subject_feature = np.load(path)
+            sid = int(trial_label[1])
             for trial_feature in subject_feature:
-                if j + 1 in ids:
+                if sid in ids:
                     feature_list.append(trial_feature)
                     label_list.append(trial_label)
         X = np.array(feature_list)
@@ -123,8 +124,9 @@ class ADFDLoader(Dataset):
             trial_label = subject_label[j]
             path = data_path + filenames[j]
             subject_feature = np.load(path)
+            sid = int(trial_label[1])
             for trial_feature in subject_feature:
-                if j + 1 in ids:
+                if sid in ids:
                     feature_list.append(trial_feature)
                     label_list.append(trial_label)
         X = np.array(feature_list)
@@ -181,8 +183,9 @@ class PTBLoader(Dataset):
             trial_label = subject_label[j]
             path = data_path + filenames[j]
             subject_feature = np.load(path)
+            sid = int(trial_label[1])
             for trial_feature in subject_feature:
-                if j + 1 in ids:
+                if sid in ids:
                     feature_list.append(trial_feature)
                     label_list.append(trial_label)
         X = np.array(feature_list)
@@ -253,8 +256,9 @@ class PTBXLLoader(Dataset):
             trial_label = subject_label[j]
             path = data_path + filenames[j]
             subject_feature = np.load(path)
+            sid = int(trial_label[1])
             for trial_feature in subject_feature:
-                if j + 1 in ids:
+                if sid in ids:
                     feature_list.append(trial_feature)
                     label_list.append(trial_label)
         X = np.array(feature_list)
