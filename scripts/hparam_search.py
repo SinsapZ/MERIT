@@ -66,7 +66,7 @@ def main():
 
         for lr, lbd_evi, lbd_pseudo, lbd_fuse, lbd_view, lbd_pseudo_loss, anneal in combos:
             cmd = [
-                sys.executable, '-m', 'MERIT.MERIT.run',
+                sys.executable, '-m', 'MERIT.run',
                 '--model', args.model,
                 '--data', args.data,
                 '--root_path', args.root_path,
