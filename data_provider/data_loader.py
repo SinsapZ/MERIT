@@ -134,6 +134,12 @@ class ADFDLoader(Dataset):
         X, y = shuffle(X, y, random_state=42)
         return X, y[:, 0]
 
+    def __getitem__(self, index):
+        return torch.from_numpy(self.X[index]), torch.from_numpy(np.asarray(self.y[index]))
+
+    def __len__(self):
+        return len(self.y)
+
 
 class ADFDDependentLoader(APAVALoader):
     pass
@@ -192,6 +198,12 @@ class PTBLoader(Dataset):
         y = np.array(label_list)
         X, y = shuffle(X, y, random_state=42)
         return X, y[:, 0]
+
+    def __getitem__(self, index):
+        return torch.from_numpy(self.X[index]), torch.from_numpy(np.asarray(self.y[index]))
+
+    def __len__(self):
+        return len(self.y)
 
 
 class PTBXLLoader(Dataset):
@@ -265,5 +277,11 @@ class PTBXLLoader(Dataset):
         y = np.array(label_list)
         X, y = shuffle(X, y, random_state=42)
         return X, y[:, 0]
+
+    def __getitem__(self, index):
+        return torch.from_numpy(self.X[index]), torch.from_numpy(np.asarray(self.y[index]))
+
+    def __len__(self):
+        return len(self.y)
 
 
