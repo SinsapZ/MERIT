@@ -141,8 +141,64 @@ class ADFDLoader(Dataset):
         return len(self.y)
 
 
-class ADFDDependentLoader(APAVALoader):
-    pass
+class ADFDDependentLoader(Dataset):
+    def __init__(self, root_path, flag=None):
+        self.root_path = root_path
+        self.data_path = os.path.join(root_path, 'Feature/')
+        self.label_path = os.path.join(root_path, 'Label/label.npy')
+        # Load all samples (sample-dependent split)
+        X_all, y_all = self._load_all(self.data_path, self.label_path)
+        # Shuffle once and split 60/20/20 deterministically
+        idx = np.arange(len(y_all))
+        rng = np.random.RandomState(42)
+        rng.shuffle(idx)
+        n = len(idx)
+        n_train = int(0.6 * n)
+        n_val = int(0.2 * n)
+        train_idx = idx[:n_train]
+        val_idx = idx[n_train:n_train + n_val]
+        test_idx = idx[n_train + n_val:]
+        if flag == 'TRAIN':
+            sel = train_idx; print('train ids(samples):', sel.tolist())
+        elif flag == 'VAL':
+            sel = val_idx; print('val ids(samples):', sel.tolist())
+        elif flag == 'TEST':
+            sel = test_idx; print('test ids(samples):', sel.tolist())
+        else:
+            sel = idx
+        self.X = X_all[sel]
+        self.y = y_all[sel]
+        # remap labels to contiguous [0, K-1]
+        uniq = np.unique(self.y)
+        remap = {v: i for i, v in enumerate(sorted(uniq))}
+        self.y = np.vectorize(remap.get)(self.y).astype(np.int64)
+        # normalize
+        self.X = normalize_batch_ts(self.X)
+        self.max_seq_len = self.X.shape[1]
+
+    def _load_all(self, data_path, label_path):
+        feature_list, label_list, filenames = [], [], []
+        subject_label = np.load(label_path)
+        for filename in os.listdir(data_path):
+            filenames.append(filename)
+        filenames.sort()
+        for j in range(len(filenames)):
+            trial_label = subject_label[j]
+            path = data_path + filenames[j]
+            subject_feature = np.load(path)  # (num_trials, T, C)
+            # append all trials with the subject label
+            for trial_feature in subject_feature:
+                feature_list.append(trial_feature)
+                label_list.append(trial_label)
+        X = np.array(feature_list)
+        y = np.array(label_list)[:, 0]
+        return X, y
+
+    def __getitem__(self, index):
+        return torch.from_numpy(self.X[index]), torch.from_numpy(np.asarray(self.y[index]))
+
+    def __len__(self):
+        return len(self.y)
 
 
 class PTBLoader(Dataset):
