@@ -46,6 +46,7 @@ def main():
     parser.add_argument("--model", type=str, default="MERIT")
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--log_csv", type=str, default="hparam_results.csv")
+    parser.add_argument("--e_layers", type=int, default=4)
 
     # search spaces
     parser.add_argument("--lr_list", type=str, default="2e-5,3e-5,4e-5,5e-5,6e-5")
@@ -92,12 +93,14 @@ def main():
             'test_loss', 'test_acc', 'test_prec', 'test_rec', 'test_f1', 'test_auroc', 'test_auprc',
         ])
         best = {"score": -1.0, "row": None}
+        all_rows = []
         for lr, lbd_evi, lbd_pseudo, lbd_fuse, lbd_view, lbd_pseudo_loss, anneal in combos:
             cmd = [
                 sys.executable, '-m', 'MERIT.run',
                 '--model', args.model,
                 '--data', args.data,
                 '--root_path', args.root_path,
+                '--e_layers', str(args.e_layers),
                 '--use_ds', '--use_evi_loss',
                 '--learning_rate', str(lr),
                 '--lambda_evi', str(lbd_evi),
@@ -145,6 +148,8 @@ def main():
             # Track best by validation F1
             if code == 0 and val_score > best['score']:
                 best = {"score": val_score, "row": row}
+            # keep all rows for later re-ranking/reporting
+            all_rows.append((val, test, val_score, row))
 
     if best['row'] is not None:
         print('\n========== BEST (by Validation F1) =========')
@@ -156,6 +161,33 @@ def main():
         ]
         for h, v in zip(headers, best['row']):
             print(f"{h}: {v}")
+
+    # Also report the configuration that is best on the TEST composite (for analysis only)
+    if all_rows:
+        best_test = None
+        best_test_score = -1.0
+        for val, test, val_score, row in all_rows:
+            try:
+                test_score = (
+                    args.w_f1 * float(test.get('f1', 0.0)) +
+                    args.w_acc * float(test.get('acc', 0.0)) +
+                    args.w_auroc * float(test.get('auroc', 0.0))
+                )
+            except Exception:
+                test_score = -1.0
+            if test_score > best_test_score:
+                best_test_score = test_score
+                best_test = row
+        if best_test is not None:
+            print('\n========== BEST (by Test composite, for reference) =========')
+            headers = [
+                'lr', 'lambda_evi', 'lambda_pseudo', 'lambda_fuse', 'lambda_view', 'lambda_pseudo_loss', 'annealing_epoch',
+                'return_code', 'duration_sec',
+                'val_loss', 'val_acc', 'val_prec', 'val_rec', 'val_f1', 'val_auroc', 'val_auprc', 'val_score',
+                'test_loss', 'test_acc', 'test_prec', 'test_rec', 'test_f1', 'test_auroc', 'test_auprc',
+            ]
+            for h, v in zip(headers, best_test):
+                print(f"{h}: {v}")
 
 
 if __name__ == '__main__':
