@@ -59,6 +59,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--use_multi_gpu", default=False)
     parser.add_argument("--devices", type=str, default="0, 1, 2, 3")
+    parser.add_argument("--seed", type=int, default=None, help="manual seed (overrides itr-based seed)")
     args = parser.parse_args()
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
     if args.use_gpu and args.use_multi_gpu:
@@ -72,7 +73,7 @@ if __name__ == "__main__":
         Exp = Exp_Classification
     if args.is_training:
         for ii in range(args.itr):
-            seed = 41 + ii
+            seed = args.seed if args.seed is not None else (41 + ii)
             random.seed(seed)
             os.environ["PYTHONHASHSEED"] = str(seed)
             np.random.seed(seed)
@@ -93,7 +94,7 @@ if __name__ == "__main__":
             torch.cuda.empty_cache()
     else:
         for ii in range(args.itr):
-            seed = 41 + ii
+            seed = args.seed if args.seed is not None else (41 + ii)
             random.seed(seed)
             os.environ["PYTHONHASHSEED"] = str(seed)
             np.random.seed(seed)
