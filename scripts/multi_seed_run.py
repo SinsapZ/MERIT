@@ -100,9 +100,17 @@ def main():
             
             print(f'\n{"="*60}')
             print(f'Running seed {seed}...')
+            print(f'Command: {" ".join(cmd)}')
             print(f'{"="*60}')
             
             code, out, dur = run_once(cmd, env=os.environ.copy())
+            
+            # Print subprocess output for debugging
+            if code != 0:
+                print(f'\n[ERROR] Seed {seed} failed with return_code={code}')
+                print('Subprocess output:')
+                print(out)
+            
             metrics = parse_metrics(out)
             val = metrics.get('val', {})
             test = metrics.get('test', {})
