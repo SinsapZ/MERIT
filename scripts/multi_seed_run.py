@@ -57,6 +57,14 @@ def main():
     parser.add_argument("--train_epochs", type=int, default=150)
     parser.add_argument("--patience", type=int, default=20)
     
+    # Additional optimization parameters
+    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--weight_decay", type=float, default=1e-4)
+    parser.add_argument("--nodedim", type=int, default=10)
+    parser.add_argument("--swa", action="store_true", default=False)
+    parser.add_argument("--lr_scheduler", type=str, default="none", choices=["none", "cosine", "step"])
+    parser.add_argument("--warmup_epochs", type=int, default=0)
+    
     # Multi-seed configuration
     parser.add_argument("--seeds", type=str, default="41,42,43,44,45", help="Comma-separated list of seeds")
     
@@ -94,9 +102,17 @@ def main():
                 '--train_epochs', str(args.train_epochs),
                 '--patience', str(args.patience),
                 '--e_layers', str(args.e_layers),
+                '--dropout', str(args.dropout),
+                '--weight_decay', str(args.weight_decay),
+                '--nodedim', str(args.nodedim),
+                '--lr_scheduler', args.lr_scheduler,
+                '--warmup_epochs', str(args.warmup_epochs),
                 '--gpu', str(args.gpu),
                 '--seed', str(seed),
             ]
+            
+            if args.swa:
+                cmd.append('--swa')
             
             print(f'\n{"="*60}')
             print(f'Running seed {seed}...')

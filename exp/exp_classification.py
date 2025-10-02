@@ -37,8 +37,31 @@ class Exp_Classification(Exp_Basic):
         return data_provider(self.args, flag)
 
     def _select_optimizer(self):
-        model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
+        weight_decay = getattr(self.args, 'weight_decay', 1e-4)
+        if weight_decay > 0:
+            model_optim = optim.AdamW(self.model.parameters(), 
+                                      lr=self.args.learning_rate,
+                                      weight_decay=weight_decay)
+        else:
+            model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
         return model_optim
+    
+    def _select_scheduler(self, optimizer):
+        scheduler_type = getattr(self.args, 'lr_scheduler', 'none')
+        warmup_epochs = getattr(self.args, 'warmup_epochs', 0)
+        
+        if scheduler_type == 'cosine':
+            from torch.optim.lr_scheduler import CosineAnnealingLR
+            scheduler = CosineAnnealingLR(optimizer, 
+                                         T_max=self.args.train_epochs - warmup_epochs, 
+                                         eta_min=self.args.learning_rate * 0.01)
+            return scheduler, warmup_epochs
+        elif scheduler_type == 'step':
+            from torch.optim.lr_scheduler import StepLR
+            scheduler = StepLR(optimizer, step_size=30, gamma=0.5)
+            return scheduler, warmup_epochs
+        else:
+            return None, 0
 
     def _select_criterion(self):
         # DS 模式下，模型前向返回 fused alpha，不使用 NLLLoss；
@@ -136,6 +159,7 @@ class Exp_Classification(Exp_Basic):
         train_steps = len(train_loader)
         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True, delta=1e-5)
         model_optim = self._select_optimizer()
+        scheduler, warmup_epochs = self._select_scheduler(model_optim)
         criterion = self._select_criterion()
 
         total_params = 0
@@ -201,6 +225,12 @@ class Exp_Classification(Exp_Basic):
                 f"Validation results --- Loss: {vali_loss:.5f}, Accuracy: {val_metrics['Accuracy']:.5f}, Precision: {val_metrics['Precision']:.5f}, Recall: {val_metrics['Recall']:.5f}, F1: {val_metrics['F1']:.5f}, AUROC: {val_metrics['AUROC']:.5f}, AUPRC: {val_metrics['AUPRC']:.5f}\n"
                 f"Test results --- Loss: {test_loss:.5f}, Accuracy: {test_metrics['Accuracy']:.5f}, Precision: {test_metrics['Precision']:.5f}, Recall: {test_metrics['Recall']:.5f} F1: {test_metrics['F1']:.5f}, AUROC: {test_metrics['AUROC']:.5f}, AUPRC: {test_metrics['AUPRC']:.5f}"
             )
+
+            # Learning rate scheduling
+            if scheduler is not None and epoch >= warmup_epochs:
+                scheduler.step()
+                current_lr = model_optim.param_groups[0]['lr']
+                print(f"Learning rate: {current_lr:.6f}")
 
             early_stopping(-val_metrics["F1"], self.swa_model if getattr(self, 'swa', False) else self.model, path)
             if early_stopping.early_stop:
