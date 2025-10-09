@@ -64,6 +64,7 @@ def main():
     parser.add_argument("--swa", action="store_true", default=False)
     parser.add_argument("--lr_scheduler", type=str, default="none", choices=["none", "cosine", "step"])
     parser.add_argument("--warmup_epochs", type=int, default=0)
+    parser.add_argument("--use_gnn", action="store_true", default=False, help="enable multi-resolution GNN")
     
     # Multi-seed configuration
     parser.add_argument("--seeds", type=str, default="41,42,43,44,45", help="Comma-separated list of seeds")
@@ -113,6 +114,9 @@ def main():
             
             if args.swa:
                 cmd.append('--swa')
+            
+            if args.use_gnn:
+                cmd.append('--use_gnn')
             
             print(f'\n{"="*60}')
             print(f'Running seed {seed}...')

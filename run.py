@@ -36,6 +36,7 @@ if __name__ == "__main__":
     parser.add_argument("--evidence_dropout", type=float, default=0.0, help="dropout before evidence head")
     parser.add_argument("--no_freq", action="store_true", default=False, help="disable frequency embedding branch")
     parser.add_argument("--no_diff", action="store_true", default=False, help="disable difference attention branch")
+    parser.add_argument("--use_gnn", action="store_true", default=False, help="enable multi-resolution GNN (from MedGNN)")
     parser.add_argument("--use_evi_loss", action="store_true", default=False, help="add evidential KL regularization to prior")
     parser.add_argument("--lambda_evi", type=float, default=1.0, help="weight for evidential KL to uniform prior")
     parser.add_argument("--use_ds", action="store_true", default=False, help="strict ETMC-style DS fusion over Dirichlet alphas")

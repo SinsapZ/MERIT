@@ -5,6 +5,7 @@ from ..layers.embed import MultiResolutionData, FrequencyEmbedding
 from ..layers.encdec import Encoder, EncoderLayer
 from ..layers.self_attention import FormerLayer, DifferenceFormerLayer
 from ..layers.difference import DifferenceDataEmb, DataRestoration
+from ..layers.multi_resolution_gnn import MRGNN
 from ..layers.evi_mr import EviMR
 
 
@@ -108,6 +109,11 @@ class Model(nn.Module):
             norm_layer=torch.nn.LayerNorm(configs.d_model),
         )
 
+        # step 3.5: multi-resolution GNN (optional, controlled by use_gnn flag)
+        self.use_gnn = getattr(configs, 'use_gnn', True)
+        if self.use_gnn:
+            self.mrgnn = MRGNN(configs, self.res_len)
+
         # step 4: evidential multi-resolution aggregation
         self.evimr = EviMR(
             self.enc_in,
@@ -141,6 +147,11 @@ class Model(nn.Module):
             enc_out_2 = [torch.zeros((multi_res_data[l].shape[0], self.enc_in, self.d_model), device=multi_res_data[l].device, dtype=multi_res_data[l].dtype) for l in range(self.res_num)]
         data_enc = [enc_out_1[l] + enc_out_2[l] for l in range(self.res_num)]
         enc_out, attns = self.encoder(data_enc, attn_mask=None)
+        
+        # Optional GNN refinement
+        if self.use_gnn:
+            enc_out, adjacency_matrices = self.mrgnn(enc_out)
+        
         output, alphas = self.evimr(enc_out)
         if getattr(self.evimr, 'use_ds', False):
             # Return fused alpha and per-resolution alphas for evidential losses
