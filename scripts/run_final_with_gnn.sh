@@ -12,7 +12,7 @@ echo "========================================================"
 
 mkdir -p results/final
 
-# 最佳配置 + GNN
+# 最佳配置 + GNN (调整训练轮数以充分训练证据融合模块)
 python -m MERIT.scripts.multi_seed_run \
   --root_path $ROOT_PATH --data APAVA --gpu $GPU \
   --lr 1e-4 \
@@ -26,8 +26,8 @@ python -m MERIT.scripts.multi_seed_run \
   --weight_decay 0 \
   --nodedim 10 \
   --batch_size 64 \
-  --train_epochs 10 \
-  --patience 3 \
+  --train_epochs 100 \
+  --patience 15 \
   --swa \
   --resolution_list 2,4,6,8 \
   --use_gnn \
