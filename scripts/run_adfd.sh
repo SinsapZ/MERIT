@@ -3,7 +3,7 @@
 # Alzheimer Detection: 88 subjects, 2 classes (HC vs AD)
 
 SEEDS="41,42,43,44,45,46,47,48,49,50"
-ROOT_PATH="/home/Data1/zbl/dataset/ADFTD/ADFD"
+ROOT_PATH="/home/Data1/zbl/dataset/ADFD"
 GPU=0
 
 echo "========================================================"
