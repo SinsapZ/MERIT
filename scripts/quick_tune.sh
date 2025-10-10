@@ -37,14 +37,15 @@ esac
 mkdir -p results/tuning/$DATASET
 
 echo "========================================================"
-echo "快速调优 - $DATASET (3 seeds)"
+echo "快速调优 - $DATASET (3 seeds, 基于MedGNN参数)"
+echo "学习率范围: 5e-5 ~ 3e-4 (MedGNN baseline: 1e-4)"
 echo "========================================================"
 
 # ============================================================
-# Config 1: 默认配置
+# Config 1: MedGNN baseline (保守)
 # ============================================================
 echo ""
-echo "Config 1: Default (lr=1e-4, dropout=0.1)"
+echo "Config 1: MedGNN Baseline (lr=1e-4, dropout=0.1)"
 python -m MERIT.scripts.multi_seed_run \
   --root_path $ROOT_PATH \
   --data $DATASET \
@@ -65,18 +66,18 @@ python -m MERIT.scripts.multi_seed_run \
   --swa \
   --resolution_list $RESOLUTION_LIST \
   --seeds "$SEEDS" \
-  --log_csv results/tuning/$DATASET/config1_default.csv
+  --log_csv results/tuning/$DATASET/config1_baseline.csv
 
 # ============================================================
-# Config 2: 更高学习率
+# Config 2: 更低学习率 (更稳定)
 # ============================================================
 echo ""
-echo "Config 2: Higher LR (lr=1.5e-4)"
+echo "Config 2: Lower LR (lr=5e-5, 更稳定收敛)"
 python -m MERIT.scripts.multi_seed_run \
   --root_path $ROOT_PATH \
   --data $DATASET \
   --gpu $GPU \
-  --lr 1.5e-4 \
+  --lr 5e-5 \
   --lambda_fuse 1.0 \
   --lambda_view 1.0 \
   --lambda_pseudo_loss 0.30 \
@@ -87,39 +88,66 @@ python -m MERIT.scripts.multi_seed_run \
   --weight_decay 0 \
   --nodedim 10 \
   --batch_size 64 \
-  --train_epochs 150 \
-  --patience 20 \
+  --train_epochs 200 \
+  --patience 30 \
   --swa \
   --resolution_list $RESOLUTION_LIST \
   --seeds "$SEEDS" \
-  --log_csv results/tuning/$DATASET/config2_higher_lr.csv
+  --log_csv results/tuning/$DATASET/config2_lower_lr.csv
 
 # ============================================================
-# Config 3: 更强正则化
+# Config 3: 更高学习率 (快速训练)
 # ============================================================
 echo ""
-echo "Config 3: Stronger Regularization (dropout=0.15, wd=1e-5)"
+echo "Config 3: Higher LR (lr=2e-4, 快速收敛)"
 python -m MERIT.scripts.multi_seed_run \
   --root_path $ROOT_PATH \
   --data $DATASET \
   --gpu $GPU \
-  --lr 1e-4 \
+  --lr 2e-4 \
   --lambda_fuse 1.0 \
   --lambda_view 1.0 \
   --lambda_pseudo_loss 0.30 \
   --annealing_epoch 50 \
+  --evidence_dropout 0.0 \
+  --e_layers $E_LAYERS \
+  --dropout 0.1 \
+  --weight_decay 0 \
+  --nodedim 10 \
+  --batch_size 64 \
+  --train_epochs 100 \
+  --patience 15 \
+  --swa \
+  --resolution_list $RESOLUTION_LIST \
+  --seeds "$SEEDS" \
+  --log_csv results/tuning/$DATASET/config3_higher_lr.csv
+
+# ============================================================
+# Config 4: 激进学习率 (最大胆)
+# ============================================================
+echo ""
+echo "Config 4: Aggressive LR (lr=3e-4, 激进尝试)"
+python -m MERIT.scripts.multi_seed_run \
+  --root_path $ROOT_PATH \
+  --data $DATASET \
+  --gpu $GPU \
+  --lr 3e-4 \
+  --lambda_fuse 1.0 \
+  --lambda_view 1.0 \
+  --lambda_pseudo_loss 0.30 \
+  --annealing_epoch 30 \
   --evidence_dropout 0.0 \
   --e_layers $E_LAYERS \
   --dropout 0.15 \
   --weight_decay 1e-5 \
   --nodedim 10 \
   --batch_size 64 \
-  --train_epochs 150 \
-  --patience 20 \
+  --train_epochs 100 \
+  --patience 15 \
   --swa \
   --resolution_list $RESOLUTION_LIST \
   --seeds "$SEEDS" \
-  --log_csv results/tuning/$DATASET/config3_strong_reg.csv
+  --log_csv results/tuning/$DATASET/config4_aggressive.csv
 
 echo ""
 echo "========================================================"
@@ -128,17 +156,27 @@ echo "========================================================"
 
 # 简单对比
 echo ""
-echo "Results:"
-for config in config1_default config2_higher_lr config3_strong_reg; do
+echo "Results Comparison:"
+echo "----------------------------------------"
+for config in config1_baseline config2_lower_lr config3_higher_lr config4_aggressive; do
     if [ -f "results/tuning/$DATASET/${config}_summary.txt" ]; then
-        echo ""
-        echo "=== $config ==="
-        grep "test_acc:" results/tuning/$DATASET/${config}_summary.txt
+        acc=$(grep "test_acc:" results/tuning/$DATASET/${config}_summary.txt | awk '{print $2}')
+        echo "$config: $acc"
     fi
 done
 
 echo ""
-echo "详细结果查看:"
-echo "  results/tuning/$DATASET/"
+echo "详细分析:"
+echo "  - config1_baseline (1e-4):   MedGNN标准配置"
+echo "  - config2_lower_lr (5e-5):   更稳定，但训练慢"
+echo "  - config3_higher_lr (2e-4):  更快收敛，可能不稳定"
+echo "  - config4_aggressive (3e-4): 激进尝试，高风险高回报"
+echo ""
+echo "建议："
+echo "  1. 如果结果相近，选择训练最快的"
+echo "  2. 如果方差大，选择更低的学习率"
+echo "  3. 如果都不理想，尝试调整其他参数"
+echo ""
+echo "详细结果查看: results/tuning/$DATASET/"
 echo ""
 
