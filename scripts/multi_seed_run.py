@@ -146,16 +146,20 @@ def main():
             f.flush()
             
             print(f'\nSeed {seed} completed: return_code={code}, duration={dur:.2f}s')
-            print(f'Val - Acc: {val.get("acc", "N/A")}, F1: {val.get("f1", "N/A")}, AUROC: {val.get("auroc", "N/A")}')
-            print(f'Test - Acc: {test.get("acc", "N/A")}, F1: {test.get("f1", "N/A")}, AUROC: {test.get("auroc", "N/A")}')
+            print(f'Val - Acc: {val.get("acc", "N/A")}, Prec: {val.get("prec", "N/A")}, Rec: {val.get("rec", "N/A")}, F1: {val.get("f1", "N/A")}, AUROC: {val.get("auroc", "N/A")}')
+            print(f'Test - Acc: {test.get("acc", "N/A")}, Prec: {test.get("prec", "N/A")}, Rec: {test.get("rec", "N/A")}, F1: {test.get("f1", "N/A")}, AUROC: {test.get("auroc", "N/A")}')
             
             if code == 0:
                 all_results.append({
                     'seed': seed,
                     'val_acc': val.get('acc', 0.0),
+                    'val_prec': val.get('prec', 0.0),
+                    'val_rec': val.get('rec', 0.0),
                     'val_f1': val.get('f1', 0.0),
                     'val_auroc': val.get('auroc', 0.0),
                     'test_acc': test.get('acc', 0.0),
+                    'test_prec': test.get('prec', 0.0),
+                    'test_rec': test.get('rec', 0.0),
                     'test_f1': test.get('f1', 0.0),
                     'test_auroc': test.get('auroc', 0.0),
                 })
@@ -166,7 +170,8 @@ def main():
         print('SUMMARY STATISTICS (Mean ± Std)')
         print(f'{"="*60}')
         
-        metrics_to_report = ['val_acc', 'val_f1', 'val_auroc', 'test_acc', 'test_f1', 'test_auroc']
+        metrics_to_report = ['val_acc', 'val_prec', 'val_rec', 'val_f1', 'val_auroc', 
+                             'test_acc', 'test_prec', 'test_rec', 'test_f1', 'test_auroc']
         
         for metric in metrics_to_report:
             values = [r[metric] for r in all_results]
