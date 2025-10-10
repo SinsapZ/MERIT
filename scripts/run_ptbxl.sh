@@ -3,7 +3,7 @@
 # Large-scale Multi-class ECG: 18885 subjects, 5 classes
 
 SEEDS="41,42,43,44,45,46,47,48,49,50"
-ROOT_PATH="/home/Data1/zbl/dataset/PTB-XL/PTB-XL"
+ROOT_PATH="/home/Data1/zbl/dataset/PTB-XL"
 GPU=0
 
 echo "========================================================"

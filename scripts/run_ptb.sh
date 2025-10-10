@@ -3,7 +3,7 @@
 # Myocardial Infarction Detection: 290 subjects, 2 classes
 
 SEEDS="41,42,43,44,45,46,47,48,49,50"
-ROOT_PATH="/home/Data1/zbl/dataset/PTB/PTB"
+ROOT_PATH="/home/Data1/zbl/dataset/PTB"
 GPU=0
 
 echo "========================================================"
