@@ -110,19 +110,23 @@ for lr in "${LR_LIST[@]}"; do
         echo "--------------------------------------------------------------------"
         
         # 根据学习率调整训练轮数
-        if (( $(echo "$lr >= 2e-4" | bc -l) )); then
-            EPOCHS=100
-            PATIENCE=15
-            ANNEALING=30
-        elif (( $(echo "$lr >= 1e-4" | bc -l) )); then
-            EPOCHS=150
-            PATIENCE=20
-            ANNEALING=50
-        else
-            EPOCHS=200
-            PATIENCE=30
-            ANNEALING=50
-        fi
+        case $lr in
+            3e-4|2e-4)
+                EPOCHS=100
+                PATIENCE=15
+                ANNEALING=30
+                ;;
+            1.5e-4|1.2e-4|1.1e-4|1e-4)
+                EPOCHS=150
+                PATIENCE=20
+                ANNEALING=50
+                ;;
+            *)
+                EPOCHS=200
+                PATIENCE=30
+                ANNEALING=50
+                ;;
+        esac
         
         python -m MERIT.scripts.multi_seed_run \
           --root_path $ROOT_PATH \
@@ -259,13 +263,17 @@ for rank in 1 2 3; do
     esac
     
     # 根据学习率设置epochs
-    if (( $(echo "$lr >= 2e-4" | bc -l) )); then
-        EPOCHS=100; PATIENCE=15; ANNEALING=30
-    elif (( $(echo "$lr >= 1e-4" | bc -l) )); then
-        EPOCHS=150; PATIENCE=20; ANNEALING=50
-    else
-        EPOCHS=200; PATIENCE=30; ANNEALING=50
-    fi
+    case $lr in
+        3e-4|2e-4)
+            EPOCHS=100; PATIENCE=15; ANNEALING=30
+            ;;
+        1.5e-4|1.2e-4|1.1e-4|1e-4)
+            EPOCHS=150; PATIENCE=20; ANNEALING=50
+            ;;
+        *)
+            EPOCHS=200; PATIENCE=30; ANNEALING=50
+            ;;
+    esac
     
     python -m MERIT.scripts.multi_seed_run \
       --root_path $ROOT_PATH \
