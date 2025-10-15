@@ -27,13 +27,13 @@ case $DATASET in
         DROPOUT=0.2
         ;;
     "PTB")
-        ROOT_PATH="/home/Data1/zbl/dataset/PTB/PTB"
+        ROOT_PATH="/home/Data1/zbl/dataset/PTB"
         E_LAYERS=4
         RESOLUTION_LIST="2,4,6,8"
         DROPOUT=0.1
         ;;
     "PTB-XL")
-        ROOT_PATH="/home/Data1/zbl/dataset/PTB-XL/PTB-XL"
+        ROOT_PATH="/home/Data1/zbl/dataset/PTB-XL"
         E_LAYERS=4
         RESOLUTION_LIST="2,4,6,8"
         DROPOUT=0.1
