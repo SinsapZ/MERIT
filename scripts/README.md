@@ -1,6 +1,6 @@
 # MERIT 实验脚本使用指南
 
-## 📁 核心脚本（7个）
+## 📁 核心脚本（9个）
 
 ### 1️⃣ `multi_seed_run.py` ⭐核心
 多随机种子实验运行器，自动统计Mean±Std。
@@ -14,14 +14,20 @@
 ### 4️⃣ `run_baselines.sh` ⭐对比
 运行Medformer和iTransformer baseline
 
-### 5️⃣ `summarize_all_datasets.py` ⭐汇总
+### 5️⃣ `run_ablation.sh` ⭐消融
+5个变体消融实验（证明各组件有效性）
+
+### 6️⃣ `summarize_all_datasets.py` ⭐汇总
 生成论文表格（LaTeX格式）
 
-### 6️⃣ `evaluate_uncertainty.py` ⭐ESWA核心
+### 7️⃣ `evaluate_uncertainty.py` ⭐ESWA核心
 不确定性评估：ECE, Selective Prediction等
 
-### 7️⃣ `README.md`
-本文档
+### 8️⃣ `analyze_uncertainty.py` ⭐ESWA分析
+全面不确定性分析：噪声鲁棒性、分布、拒绝实验、案例
+
+### 9️⃣ `README.md` + `QUICK_GUIDE.md`
+使用文档
 
 ---
 
@@ -121,4 +127,39 @@ python MERIT/scripts/summarize_all_datasets.py
 | 70% | ~84% | 82.6% ← **超越** |
 
 **论文角度**: 不确定性感知的医疗AI系统，支持人机协作
+
+---
+
+## 📋 ESWA完整实验清单
+
+### 必做实验（8个）
+
+1. ✅ **4个数据集性能** - `run_all_datasets.sh`
+2. ✅ **Baseline对比** - `run_baselines.sh` (Medformer, iTransformer)
+3. ✅ **消融实验** - `run_ablation.sh` (5个变体)
+4. ✅ **ECE校准** - `evaluate_uncertainty.py`
+5. ✅ **Selective Prediction** - `evaluate_uncertainty.py`
+6. ✅ **不确定性分布** - `analyze_uncertainty.py`
+7. ✅ **拒绝实验** - `analyze_uncertainty.py`
+8. ✅ **案例可视化** - `analyze_uncertainty.py`
+
+### 可选实验（增强）
+
+9. ⭐ 噪声鲁棒性实验
+10. ⭐ OOD检测实验
+
+---
+
+## ⏱️ 完整时间规划
+
+| 任务 | 脚本 | 时间 |
+|------|------|------|
+| 超参数搜索 | find_best_params.sh | 10小时 |
+| 主实验(4数据集) | run_all_datasets.sh | 8小时 |
+| Baseline对比 | run_baselines.sh | 4小时 |
+| 消融实验(2数据集) | run_ablation.sh | 4小时 |
+| 不确定性评估 | evaluate/analyze_uncertainty.py | 2小时 |
+| **总计** | - | **~28小时** |
+
+**写论文**: 2周
 

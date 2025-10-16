@@ -1,42 +1,64 @@
 # MERIT 实验快速指南
 
-## ✅ 7个核心文件
+## ✅ 9个核心文件
 
 ```
 scripts/
 ├── 1. multi_seed_run.py           # 核心运行器
-├── 2. find_best_params.sh         # 超参数搜索 (3×3×3=27配置)
-├── 3. run_all_datasets.sh         # 主实验 (4数据集×10seeds)
+├── 2. find_best_params.sh         # 超参数搜索 (3×3×3=27)
+├── 3. run_all_datasets.sh         # 主实验 (4数据集)
 ├── 4. run_baselines.sh            # Baseline对比
-├── 5. summarize_all_datasets.py   # 结果汇总+LaTeX表格
-├── 6. evaluate_uncertainty.py     # 不确定性评估(ESWA核心)
-└── 7. README.md                   # 使用文档
+├── 5. run_ablation.sh             # 消融实验 (5变体)
+├── 6. summarize_all_datasets.py   # 结果汇总+LaTeX
+├── 7. evaluate_uncertainty.py     # 不确定性评估
+├── 8. analyze_uncertainty.py      # 不确定性全面分析
+└── 9. README.md / QUICK_GUIDE.md  # 文档
 ```
 
 ---
 
-## 🚀 完整流程
+## 🚀 完整实验流程（ESWA要求）
 
 ### 0️⃣ 超参数搜索（10小时）
 
 ```bash
-cd /home/Data1/zbl
-
-# 每个数据集搜索27个配置
 bash MERIT/scripts/find_best_params.sh APAVA 0
 bash MERIT/scripts/find_best_params.sh ADFD-Sample 0
 bash MERIT/scripts/find_best_params.sh PTB 0
 bash MERIT/scripts/find_best_params.sh PTB-XL 0
-
-# 查看最佳配置
-cat results/param_search/*/best_config.txt
 ```
 
----
+### 1️⃣ 主实验（更新配置后，8小时）
 
-### 1️⃣ 更新配置 → 2️⃣ 运行主实验 → 3️⃣ Baseline对比 → 4️⃣ 生成表格
+```bash
+bash MERIT/scripts/run_all_datasets.sh
+```
 
-详见 `README.md`
+### 2️⃣ Baseline对比（4小时）
+
+```bash
+bash MERIT/scripts/run_baselines.sh <DATASET>
+```
+
+### 3️⃣ 消融实验（4小时，在PTB-XL和ADFD上）
+
+```bash
+bash MERIT/scripts/run_ablation.sh PTB-XL 0
+bash MERIT/scripts/run_ablation.sh ADFD-Sample 0
+```
+
+### 4️⃣ 不确定性分析（ESWA核心，需修改代码）
+
+```bash
+python MERIT/scripts/evaluate_uncertainty.py --uncertainty_dir <path>
+python MERIT/scripts/analyze_uncertainty.py --uncertainty_dir <path>
+```
+
+### 5️⃣ 生成论文表格
+
+```bash
+python MERIT/scripts/summarize_all_datasets.py
+```
 
 ---
 
