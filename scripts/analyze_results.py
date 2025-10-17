@@ -120,11 +120,47 @@ def analyze_from_output(output_file):
     return results
 
 
+def decode_config_params(config_id):
+    """根据配置ID反推参数（与find_best_params_fast.sh的循环顺序一致）"""
+    # 配置ID从1开始
+    config_idx = config_id - 1
+    
+    # 参数列表（与find_best_params_fast.sh保持一致）
+    lr_vals = ['1e-4', '1.5e-4', '2e-4']
+    lv_vals = ['0.5', '1.0', '1.5']
+    lp_vals = ['0.2', '0.3', '0.5']
+    
+    # 反推索引（嵌套循环顺序：lr -> lambda_view -> lambda_pseudo）
+    lp_idx = config_idx % 3
+    lv_idx = (config_idx // 3) % 3
+    lr_idx = config_idx // 9
+    
+    return {
+        'lr': lr_vals[lr_idx],
+        'lambda_view': lv_vals[lv_idx],
+        'lambda_pseudo': lp_vals[lp_idx]
+    }
+
+
 def print_results(results, dataset, top_n=10, save_dir=None):
     """打印和保存结果"""
     if not results:
         print("❌ 没有结果可显示")
         return
+    
+    # 补充missing的参数（如果是unknown，尝试从config ID反推）
+    for res in results:
+        if res['lr'] == 'unknown' or res['lambda_view'] == 'unknown':
+            # 尝试从config name提取ID
+            config_name = res['config']
+            match = re.search(r'config(\d+)', config_name)
+            if match:
+                config_id = int(match.group(1))
+                params = decode_config_params(config_id)
+                res['lr'] = params['lr']
+                res['lambda_view'] = params['lambda_view']
+                res['lambda_pseudo'] = params['lambda_pseudo']
+                res['config_id'] = config_id
     
     # 按准确率排序
     results.sort(key=lambda x: x['acc_mean'], reverse=True)
@@ -155,8 +191,14 @@ def print_results(results, dataset, top_n=10, save_dir=None):
         # 保存配置ID
         with open(f"{save_dir}/top5_configs.txt", 'w') as f:
             for res in results[:5]:
-                # 提取config ID
-                config_id = res.get('config_id') or res['config'].replace('config', '').split('_')[0]
+                # 提取config ID - 从config name中提取数字
+                config_id = res.get('config_id')
+                if not config_id:
+                    match = re.search(r'config(\d+)', res['config'])
+                    if match:
+                        config_id = match.group(1)
+                    else:
+                        config_id = res['config']  # 如果无法提取，保存原名
                 f.write(f"{config_id}\n")
         
         # 保存最佳配置
