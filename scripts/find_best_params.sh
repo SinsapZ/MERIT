@@ -25,6 +25,7 @@ case $DATASET in
         E_LAYERS=6
         RESOLUTION_LIST="2"
         DROPOUT=0.2
+        BATCH_SIZE=128
         ;;
     "PTB")
         ROOT_PATH="/home/Data1/zbl/dataset/PTB"
@@ -45,6 +46,9 @@ case $DATASET in
 esac
 
 mkdir -p results/param_search/$DATASET
+
+# 设置默认batch_size（如果没有在case中设置）
+BATCH_SIZE=${BATCH_SIZE:-64}
 
 echo "========================================================================"
 echo "超参数搜索 - $DATASET"
@@ -102,7 +106,7 @@ for lr in 1e-4 1.5e-4 2e-4; do
               --dropout $DROPOUT \
               --weight_decay 0 \
               --nodedim 10 \
-              --batch_size 64 \
+              --batch_size $BATCH_SIZE \
               --train_epochs $EPOCHS \
               --patience $PATIENCE \
               --swa \

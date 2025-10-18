@@ -27,6 +27,7 @@ case $DATASET in
         E_LAYERS=6
         RESOLUTION_LIST="2"
         DROPOUT=0.2
+        BATCH_SIZE=128
         ;;
     "PTB")
         ROOT_PATH="/home/Data1/zbl/dataset/PTB"
@@ -48,6 +49,9 @@ esac
 
 RESULT_DIR="results/param_search/$DATASET"
 mkdir -p $RESULT_DIR
+
+# 设置默认batch_size（如果没有在case中设置）
+BATCH_SIZE=${BATCH_SIZE:-64}
 
 # ============================================================================
 # 阶段1: 快速筛选 (27个配置, 1 seed, 少量epochs)
@@ -102,7 +106,7 @@ if [ "$STAGE" == "all" ] || [ "$STAGE" == "stage1" ]; then
                   --dropout $DROPOUT \
                   --weight_decay 0 \
                   --nodedim 10 \
-                  --batch_size 64 \
+                  --batch_size $BATCH_SIZE \
                   --train_epochs $EPOCHS \
                   --patience $PATIENCE \
                   --swa \
@@ -241,7 +245,7 @@ EOF
                   --dropout $DROPOUT \
                   --weight_decay 0 \
                   --nodedim 10 \
-                  --batch_size 64 \
+                  --batch_size $BATCH_SIZE \
                   --train_epochs $EPOCHS \
                   --patience $PATIENCE \
                   --swa \
