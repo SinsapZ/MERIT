@@ -9,7 +9,9 @@ STAGE=${3:-all}  # all, stage1, stage2
 
 if [ -z "$DATASET" ]; then
     echo "Usage: bash find_best_params_fast.sh <DATASET> [GPU] [STAGE]"
-    echo "Available: APAVA, ADFD-Sample, PTB, PTB-XL"
+    echo "Available: APAVA, ADFD, ADFD-Sample, PTB, PTB-XL"
+    echo "  ADFD: Subject-independent (harder, cross-subject)"
+    echo "  ADFD-Sample: Sample-dependent (easier, within-subject)"
     echo "STAGE: all(默认), stage1(仅快速筛选), stage2(仅精确验证)"
     exit 1
 fi
@@ -21,6 +23,13 @@ case $DATASET in
         E_LAYERS=4
         RESOLUTION_LIST="2,4,6,8"
         DROPOUT=0.1
+        ;;
+    "ADFD")
+        ROOT_PATH="/home/Data1/zbl/dataset/ADFD"
+        E_LAYERS=6
+        RESOLUTION_LIST="2"
+        DROPOUT=0.2
+        BATCH_SIZE=128
         ;;
     "ADFD-Sample")
         ROOT_PATH="/home/Data1/zbl/dataset/ADFD"

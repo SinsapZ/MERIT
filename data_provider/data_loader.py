@@ -107,28 +107,38 @@ class ADFDLoader(Dataset):
         return train_ids, val_ids, test_ids
 
     def _load_by_ids(self, data_path, label_path, flag=None):
+        """
+        Loads ADFD data from npy files in data_path based on flag and ids
+        Match MedGNN implementation exactly
+        """
         feature_list, label_list, filenames = [], [], []
         subject_label = np.load(label_path)
         for filename in os.listdir(data_path):
             filenames.append(filename)
         filenames.sort()
         if flag == "TRAIN":
-            ids = self.train_ids; print("train ids:", ids)
+            ids = self.train_ids
+            print("train ids:", ids)
         elif flag == "VAL":
-            ids = self.val_ids; print("val ids:", ids)
+            ids = self.val_ids
+            print("val ids:", ids)
         elif flag == "TEST":
-            ids = self.test_ids; print("test ids:", ids)
+            ids = self.test_ids
+            print("test ids:", ids)
         else:
             ids = subject_label[:, 1]
+            print("all ids:", ids)
+        
         for j in range(len(filenames)):
             trial_label = subject_label[j]
             path = data_path + filenames[j]
             subject_feature = np.load(path)
-            sid = int(trial_label[1])
+            # Match MedGNN: use file index j+1 (id starts from 1, not 0)
             for trial_feature in subject_feature:
-                if sid in ids:
+                if j + 1 in ids:
                     feature_list.append(trial_feature)
                     label_list.append(trial_label)
+        
         X = np.array(feature_list)
         y = np.array(label_list)
         X, y = shuffle(X, y, random_state=42)
