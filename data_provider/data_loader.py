@@ -143,31 +143,34 @@ class ADFDLoader(Dataset):
 
 class ADFDDependentLoader(Dataset):
     def __init__(self, root_path, flag=None):
+        from sklearn.model_selection import train_test_split
         self.root_path = root_path
         self.data_path = os.path.join(root_path, 'Feature/')
         self.label_path = os.path.join(root_path, 'Label/label.npy')
         # Load all samples (sample-dependent split)
         X_all, y_all = self._load_all(self.data_path, self.label_path)
-        # Shuffle once and split 60/20/20 deterministically
-        idx = np.arange(len(y_all))
-        rng = np.random.RandomState(42)
-        rng.shuffle(idx)
-        n = len(idx)
-        n_train = int(0.6 * n)
-        n_val = int(0.2 * n)
-        train_idx = idx[:n_train]
-        val_idx = idx[n_train:n_train + n_val]
-        test_idx = idx[n_train + n_val:]
+        
+        # Use stratified split like MedGNN to ensure balanced class distribution
+        # Split: 60% train, 20% val, 20% test
+        X_temp, X_test, y_temp, y_test = train_test_split(
+            X_all, y_all, test_size=0.2, random_state=42, stratify=y_all
+        )
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_temp, y_temp, test_size=0.25, random_state=42, stratify=y_temp  # 0.25 * 0.8 = 0.2
+        )
+        
         if flag == 'TRAIN':
-            sel = train_idx; print('train ids(samples):', sel.tolist())
+            self.X, self.y = X_train, y_train
+            print(f'train samples: {len(y_train)}, class distribution: {np.bincount(y_train.astype(int))}')
         elif flag == 'VAL':
-            sel = val_idx; print('val ids(samples):', sel.tolist())
+            self.X, self.y = X_val, y_val
+            print(f'val samples: {len(y_val)}, class distribution: {np.bincount(y_val.astype(int))}')
         elif flag == 'TEST':
-            sel = test_idx; print('test ids(samples):', sel.tolist())
+            self.X, self.y = X_test, y_test
+            print(f'test samples: {len(y_test)}, class distribution: {np.bincount(y_test.astype(int))}')
         else:
-            sel = idx
-        self.X = X_all[sel]
-        self.y = y_all[sel]
+            self.X, self.y = X_all, y_all
+            
         # remap labels to contiguous [0, K-1]
         uniq = np.unique(self.y)
         remap = {v: i for i, v in enumerate(sorted(uniq))}
