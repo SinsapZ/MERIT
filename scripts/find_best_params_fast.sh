@@ -30,6 +30,11 @@ case $DATASET in
         RESOLUTION_LIST="2"
         DROPOUT=0.2
         BATCH_SIZE=128
+        # 优化（仅脚本层，不改multi_seed）：学习率调度、warmup、证据dropout、权重衰减
+        LR_SCHEDULER="cosine"
+        WARMUP_EPOCHS=5
+        EVI_DROPOUT=0.10
+        WEIGHT_DECAY=1e-4
         ;;
     "ADFD-Sample")
         ROOT_PATH="/home/Data1/zbl/dataset/ADFD"
@@ -37,6 +42,11 @@ case $DATASET in
         RESOLUTION_LIST="2"
         DROPOUT=0.2
         BATCH_SIZE=128
+        # 优化（仅脚本层，不改multi_seed）：学习率调度、warmup、证据dropout、权重衰减
+        LR_SCHEDULER="cosine"
+        WARMUP_EPOCHS=5
+        EVI_DROPOUT=0.05
+        WEIGHT_DECAY=5e-5
         ;;
     "PTB")
         ROOT_PATH="/home/Data1/zbl/dataset/PTB"
@@ -110,11 +120,13 @@ if [ "$STAGE" == "all" ] || [ "$STAGE" == "stage1" ]; then
                   --lambda_view $lambda_view \
                   --lambda_pseudo_loss $lambda_pseudo \
                   --annealing_epoch $ANNEALING \
-                  --evidence_dropout 0.0 \
+                  --evidence_dropout ${EVI_DROPOUT:-0.0} \
                   --e_layers $E_LAYERS \
                   --dropout $DROPOUT \
-                  --weight_decay 0 \
+                  --weight_decay ${WEIGHT_DECAY:-0} \
                   --nodedim 10 \
+                  --lr_scheduler ${LR_SCHEDULER:-none} \
+                  --warmup_epochs ${WARMUP_EPOCHS:-0} \
                   --batch_size $BATCH_SIZE \
                   --train_epochs $EPOCHS \
                   --patience $PATIENCE \
@@ -249,11 +261,13 @@ EOF
                   --lambda_view $lambda_view \
                   --lambda_pseudo_loss $lambda_pseudo \
                   --annealing_epoch $ANNEALING \
-                  --evidence_dropout 0.0 \
+                  --evidence_dropout ${EVI_DROPOUT:-0.0} \
                   --e_layers $E_LAYERS \
                   --dropout $DROPOUT \
-                  --weight_decay 0 \
+                  --weight_decay ${WEIGHT_DECAY:-0} \
                   --nodedim 10 \
+                  --lr_scheduler ${LR_SCHEDULER:-none} \
+                  --warmup_epochs ${WARMUP_EPOCHS:-0} \
                   --batch_size $BATCH_SIZE \
                   --train_epochs $EPOCHS \
                   --patience $PATIENCE \
