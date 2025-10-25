@@ -50,6 +50,8 @@ def analyze_from_csv(dataset, results_dir="results/param_search"):
                     'acc_std': df_ok['test_acc'].std() if len(df_ok) > 1 else 0,
                     'f1_mean': df_ok['test_f1'].mean(),
                     'auroc_mean': df_ok['test_auroc'].mean(),
+                    'recall_mean': df_ok['test_rec'].mean() if 'test_rec' in df_ok.columns else None,
+                    'auprc_mean': df_ok['test_auprc'].mean() if 'test_auprc' in df_ok.columns else None,
                     'n_seeds': len(df_ok),
                 })
         except Exception as e:
@@ -168,7 +170,7 @@ def print_results(results, dataset, top_n=10, save_dir=None):
     print("\n" + "="*100)
     print(f"超参数搜索结果分析 - {dataset}")
     print("="*100)
-    print(f"{'Rank':<6} {'Config':<15} {'LR':<10} {'λ_view':<8} {'λ_pseudo':<10} {'Acc':<18} {'F1':<10} {'AUROC':<10} {'Seeds':<8}")
+    print(f"{'Rank':<6} {'Config':<15} {'LR':<10} {'λ_view':<8} {'λ_pseudo':<10} {'Acc':<18} {'F1':<10} {'AUROC':<10} {'Recall':<10} {'AUPRC':<10} {'Seeds':<8}")
     print("-"*100)
     
     for i, res in enumerate(results[:top_n], 1):
@@ -180,9 +182,11 @@ def print_results(results, dataset, top_n=10, save_dir=None):
         else:
             acc_str += "       "
         
+        recall_str = f"{res['recall_mean']:.4f}" if res.get('recall_mean') is not None else "-"
+        auprc_str = f"{res['auprc_mean']:.4f}" if res.get('auprc_mean') is not None else "-"
         print(f"{marker:<6} {res['config']:<15} {res['lr']:<10} {res['lambda_view']:<8} "
               f"{res['lambda_pseudo']:<10} {acc_str:<18} {res['f1_mean']:.4f}    "
-              f"{res['auroc_mean']:.4f}    {res['n_seeds']}")
+              f"{res['auroc_mean']:.4f}    {recall_str:<10} {auprc_str:<10} {res['n_seeds']}")
     
     # 保存Top5
     if save_dir:
@@ -210,6 +214,10 @@ def print_results(results, dataset, top_n=10, save_dir=None):
                 f.write(f" ± {best['acc_std']:.4f}")
             f.write(f"\nTest F1: {best['f1_mean']:.4f}\n")
             f.write(f"Test AUROC: {best['auroc_mean']:.4f}\n")
+            if best.get('recall_mean') is not None:
+                f.write(f"Test Recall: {best['recall_mean']:.4f}\n")
+            if best.get('auprc_mean') is not None:
+                f.write(f"Test AUPRC: {best['auprc_mean']:.4f}\n")
             f.write(f"Seeds: {best['n_seeds']}\n\n")
             f.write("推荐参数:\n")
             f.write(f"--lr {best['lr']}\n")
