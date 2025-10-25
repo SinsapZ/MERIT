@@ -268,6 +268,52 @@ class Exp_Classification(Exp_Basic):
             f"Validation results --- Loss: {vali_loss:.5f}, Accuracy: {val_metrics['Accuracy']:.5f}, Precision: {val_metrics['Precision']:.5f}, Recall: {val_metrics['Recall']:.5f}, F1: {val_metrics['F1']:.5f}, AUROC: {val_metrics['AUROC']:.5f}, AUPRC: {val_metrics['AUPRC']:.5f}\n"
             f"Test results --- Loss: {test_loss:.5f}, Accuracy: {test_metrics['Accuracy']:.5f}, Precision: {test_metrics['Precision']:.5f}, Recall: {test_metrics['Recall']:.5f}, F1: {test_metrics['F1']:.5f}, AUROC: {test_metrics['AUROC']:.5f}, AUPRC: {test_metrics['AUPRC']:.5f}"
         )
+        # optional: save per-sample uncertainty for downstream plotting
+        try:
+            if getattr(self.args, 'save_uncertainty', False):
+                import numpy as np
+                from tqdm import tqdm
+                self.model.eval()
+                all_alpha = []
+                all_pred = []
+                all_label = []
+                with torch.no_grad():
+                    for batch_x, label, padding_mask in tqdm(test_loader, desc='Saving uncertainty'):
+                        batch_x = batch_x.float().to(self.device)
+                        padding_mask = padding_mask.float().to(self.device)
+                        label = label.to(self.device)
+                        if getattr(self.args, 'use_ds', False):
+                            fused_alpha, _ = self.model(batch_x, padding_mask, None, None)
+                            alpha = fused_alpha
+                            prob = alpha / torch.sum(alpha, dim=1, keepdim=True)
+                            pred = torch.argmax(prob, dim=1)
+                        else:
+                            logits, _ = self.model(batch_x, padding_mask, None, None)
+                            prob = torch.softmax(logits, dim=1)
+                            # as pseudo-alpha: alpha = prob * K  (approximate)
+                            K = prob.shape[1]
+                            alpha = prob * K
+                            pred = torch.argmax(prob, dim=1)
+                        all_alpha.append(alpha.cpu())
+                        all_pred.append(pred.cpu())
+                        all_label.append(label.cpu())
+                all_alpha = torch.cat(all_alpha, dim=0).numpy()
+                all_pred = torch.cat(all_pred, dim=0).numpy()
+                all_label = torch.cat(all_label, dim=0).numpy()
+                # uncertainty u = K / sum(alpha)
+                S = all_alpha.sum(axis=1, keepdims=True)
+                K = all_alpha.shape[1]
+                uncertainties = (K / S).squeeze(1)
+                confidences = 1.0 - uncertainties
+                out_dir = self.args.uncertainty_dir if getattr(self.args, 'uncertainty_dir', '') else os.path.join('./checkpoints', self.args.task_name, self.args.model_id, self.args.model, setting, 'uncertainty')
+                os.makedirs(out_dir, exist_ok=True)
+                np.save(os.path.join(out_dir, 'uncertainties.npy'), uncertainties)
+                np.save(os.path.join(out_dir, 'confidences.npy'), confidences)
+                np.save(os.path.join(out_dir, 'predictions.npy'), all_pred)
+                np.save(os.path.join(out_dir, 'labels.npy'), all_label)
+                print(f"Saved uncertainty arrays to: {out_dir}")
+        except Exception as e:
+            print(f"[warn] saving uncertainty failed: {e}")
         return
 
     def _evi_kl_loss(self, alphas, args):

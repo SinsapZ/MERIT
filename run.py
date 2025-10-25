@@ -40,6 +40,9 @@ if __name__ == "__main__":
     parser.add_argument("--use_evi_loss", action="store_true", default=False, help="add evidential KL regularization to prior")
     parser.add_argument("--lambda_evi", type=float, default=1.0, help="weight for evidential KL to uniform prior")
     parser.add_argument("--use_ds", action="store_true", default=False, help="strict ETMC-style DS fusion over Dirichlet alphas")
+    # uncertainty saving
+    parser.add_argument("--save_uncertainty", action="store_true", default=False, help="save per-sample uncertainties/confidences/predictions/labels on test set")
+    parser.add_argument("--uncertainty_dir", type=str, default='', help="directory to save uncertainty npy files; default: under checkpoint folder")
     # evidential loss weights
     parser.add_argument("--lambda_fuse", type=float, default=1.0, help="weight for fused alpha loss")
     parser.add_argument("--lambda_view", type=float, default=1.0, help="weight for per-view alpha loss")
