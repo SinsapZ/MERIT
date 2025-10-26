@@ -272,7 +272,11 @@ class Exp_Classification(Exp_Basic):
         try:
             if getattr(self.args, 'save_uncertainty', False):
                 import numpy as np
-                from tqdm import tqdm
+                try:
+                    from tqdm import tqdm  # optional
+                except Exception:
+                    def tqdm(x, **kwargs):
+                        return x
                 self.model.eval()
                 all_alpha = []
                 all_pred = []
