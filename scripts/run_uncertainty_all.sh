@@ -106,30 +106,36 @@ os.makedirs(os.path.join(base, ds), exist_ok=True)
 
 # 覆盖-准确率曲线对比（转为拒绝率）
 def load_curve(d):
-    c=np.load(os.path.join(d,'confidences.npy')); y=np.load(os.path.join(d,'labels.npy')); p=np.load(os.path.join(d,'predictions.npy'))
+    cf=os.path.join(d,'confidences.npy'); lf=os.path.join(d,'labels.npy'); pf=os.path.join(d,'predictions.npy')
+    if not (os.path.exists(cf) and os.path.exists(lf) and os.path.exists(pf)):
+        print('[skip] missing arrays in', d)
+        return None, None
+    c=np.load(cf); y=np.load(lf); p=np.load(pf)
     cov, acc = selective_prediction(c,p,y)
-    rej = 100 - cov
-    return rej, acc
+    return 100 - cov, acc
 re_evi, ac_evi = load_curve(evi)
 re_sft, ac_sft = load_curve(soft)
-plt.figure(figsize=(8,5))
-plt.plot(re_evi, ac_evi, 'b-o', label='EviMR-Net')
-plt.plot(re_sft, ac_sft, 'r--o', label='Softmax')
-plt.xlabel('Rejection rate (%)'); plt.ylabel('Accuracy (%)'); plt.title(f'{ds}: Accuracy vs Rejection'); plt.grid(True, alpha=0.3); plt.legend(); plt.tight_layout()
-plt.savefig(os.path.join(base, ds, 'acc_vs_reject_compare.png'), dpi=300)
-plt.close()
+if re_evi is not None and re_sft is not None:
+    plt.figure(figsize=(8,5))
+    plt.plot(re_evi, ac_evi, 'b-o', label='EviMR-Net')
+    plt.plot(re_sft, ac_sft, 'r--o', label='Softmax')
+    plt.xlabel('Rejection rate (%)'); plt.ylabel('Accuracy (%)'); plt.title(f'{ds}: Accuracy vs Rejection'); plt.grid(True, alpha=0.3); plt.legend(); plt.tight_layout()
+    plt.savefig(os.path.join(base, ds, 'acc_vs_reject_compare.png'), dpi=300)
+    plt.close()
 
 # 不确定性分布（近似KDE：使用高分辨率直方图作为密度替代）
-u = np.load(os.path.join(evi,'uncertainties.npy'))
-y = np.load(os.path.join(evi,'labels.npy'))
-p = np.load(os.path.join(evi,'predictions.npy'))
-err = (p!=y)
-plt.figure(figsize=(7,5))
-plt.hist(u[~err], bins=60, density=True, alpha=0.4, label='Correct')
-plt.hist(u[err],  bins=60, density=True, alpha=0.4, label='Misclassified')
-plt.xlabel('Uncertainty (u)'); plt.ylabel('Density'); plt.title(f'{ds}: Uncertainty Distribution (EviMR)'); plt.legend(); plt.tight_layout()
-plt.savefig(os.path.join(base, ds, 'uncert_density_evi.png'), dpi=300)
-plt.close()
+uf=os.path.join(evi,'uncertainties.npy'); lf=os.path.join(evi,'labels.npy'); pf=os.path.join(evi,'predictions.npy')
+if os.path.exists(uf) and os.path.exists(lf) and os.path.exists(pf):
+    u = np.load(uf); y = np.load(lf); p = np.load(pf)
+    err = (p!=y)
+    plt.figure(figsize=(7,5))
+    plt.hist(u[~err], bins=60, density=True, alpha=0.4, label='Correct')
+    plt.hist(u[err],  bins=60, density=True, alpha=0.4, label='Misclassified')
+    plt.xlabel('Uncertainty (u)'); plt.ylabel('Density'); plt.title(f'{ds}: Uncertainty Distribution (EviMR)'); plt.legend(); plt.tight_layout()
+    plt.savefig(os.path.join(base, ds, 'uncert_density_evi.png'), dpi=300)
+    plt.close()
+else:
+    print('[skip] missing uncertainty arrays in', evi)
 print('Saved compare curves & uncertainty density for', ds)
 PY
 
@@ -143,7 +149,10 @@ import argparse as ap
 def noise_curve(ds, use_ds, root, res, e_layers, dropout, bs, lr, wd, seed, gpu, out_png):
     args = ap.Namespace(task_name='classification', model_id=f'UNCERT-{ds}-NOISE-{"EVI" if use_ds else "SOFT"}', model='MERIT',
                         data=ds, root_path=root, use_gpu=True, use_multi_gpu=False, devices='0', gpu=gpu,
-                        freq='h', embed='timeF',
+                        freq='h', embed='timeF', output_attention=False, activation='gelu',
+                        single_channel=False, augmentations='none,drop0.35', no_freq=False, no_diff=False,
+                        use_gnn=False, use_evi_loss=False, lambda_evi=1.0, agg='evi', lambda_pseudo=1.0,
+                        evidence_act='softplus', evidence_dropout=0.0,
                         d_model=$D_MODEL, d_ff=$D_FF, n_heads=$N_HEADS,
                         e_layers=e_layers, dropout=dropout, resolution_list=res,
                         nodedim=$NODEDIM, batch_size=bs, train_epochs=$EPOCHS, patience=$PATIENCE,
@@ -190,7 +199,10 @@ ds = "$DS"; root = "$ROOT"; res = "$RES"; outb = "$OUT_BASE"; out_dir = os.path.
 os.makedirs(out_dir, exist_ok=True)
 args = ap.Namespace(task_name='classification', model_id=f'UNCERT-{ds}-CASE', model='MERIT',
                     data=ds, root_path=root, use_gpu=True, use_multi_gpu=False, devices='0', gpu=$GPU,
-                    freq='h', embed='timeF',
+                    freq='h', embed='timeF', output_attention=False, activation='gelu',
+                    single_channel=False, augmentations='none,drop0.35', no_freq=False, no_diff=False,
+                    use_gnn=False, use_evi_loss=False, lambda_evi=1.0, agg='evi', lambda_pseudo=1.0,
+                    evidence_act='softplus', evidence_dropout=0.0,
                     d_model=$D_MODEL, d_ff=$D_FF, n_heads=$N_HEADS,
                     e_layers=$E_LAYERS, dropout=$DROPOUT, resolution_list=res,
                     nodedim=$NODEDIM, batch_size=16, train_epochs=$EPOCHS, patience=$PATIENCE,
