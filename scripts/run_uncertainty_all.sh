@@ -143,6 +143,7 @@ import argparse as ap
 def noise_curve(ds, use_ds, root, res, e_layers, dropout, bs, lr, wd, seed, gpu, out_png):
     args = ap.Namespace(task_name='classification', model_id=f'UNCERT-{ds}-NOISE-{"EVI" if use_ds else "SOFT"}', model='MERIT',
                         data=ds, root_path=root, use_gpu=True, use_multi_gpu=False, devices='0', gpu=gpu,
+                        freq='h', embed='timeF',
                         d_model=$D_MODEL, d_ff=$D_FF, n_heads=$N_HEADS,
                         e_layers=e_layers, dropout=dropout, resolution_list=res,
                         nodedim=$NODEDIM, batch_size=bs, train_epochs=$EPOCHS, patience=$PATIENCE,
@@ -189,6 +190,7 @@ ds = "$DS"; root = "$ROOT"; res = "$RES"; outb = "$OUT_BASE"; out_dir = os.path.
 os.makedirs(out_dir, exist_ok=True)
 args = ap.Namespace(task_name='classification', model_id=f'UNCERT-{ds}-CASE', model='MERIT',
                     data=ds, root_path=root, use_gpu=True, use_multi_gpu=False, devices='0', gpu=$GPU,
+                    freq='h', embed='timeF',
                     d_model=$D_MODEL, d_ff=$D_FF, n_heads=$N_HEADS,
                     e_layers=$E_LAYERS, dropout=$DROPOUT, resolution_list=res,
                     nodedim=$NODEDIM, batch_size=16, train_epochs=$EPOCHS, patience=$PATIENCE,
