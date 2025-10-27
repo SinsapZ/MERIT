@@ -92,50 +92,28 @@ run_one_dataset() {
     2>&1 | grep -E "(Validation results|Test results|Saved uncertainty|SUMMARY|SUMMARY STATISTICS)" || true
 
   # --- 3) 指标与图：单方法（可靠度图/选择性预测） ---
-  python -m MERIT.scripts.evaluate_uncertainty --uncertainty_dir "$EVI_DIR" --dataset_name "$DS" --output_dir "$OUT_BASE/$DS/plots_evi" || true
-  python -m MERIT.scripts.evaluate_uncertainty --uncertainty_dir "$SOFT_DIR" --dataset_name "$DS" --output_dir "$OUT_BASE/$DS/plots_soft" || true
+  python -m MERIT.scripts.evaluate_uncertainty --uncertainty_dir "$EVI_DIR" --dataset_name "$DS" --output_dir "$OUT_BASE/$DS/plots_evi" --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' --reject_rate 20 || true
+  python -m MERIT.scripts.evaluate_uncertainty --uncertainty_dir "$SOFT_DIR" --dataset_name "$DS" --output_dir "$OUT_BASE/$DS/plots_soft" --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' --reject_rate 20 || true
 
   # --- 4) 叠加比较：准确率-拒绝率曲线 & 不确定性分布 ---
+  python -m MERIT.scripts.compare_selective --base_dir "$OUT_BASE/$DS" --dataset "$DS" --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' || true
   python - <<PY || true
 import os, numpy as np, matplotlib.pyplot as plt
-from MERIT.scripts.evaluate_uncertainty import selective_prediction
-ds = "$DS"; base = "$OUT_BASE"
-evi = os.path.join(base, ds, 'evi')
-soft= os.path.join(base, ds, 'softmax')
-os.makedirs(os.path.join(base, ds), exist_ok=True)
-
-# 覆盖-准确率曲线对比（转为拒绝率）
-def load_curve(d):
-    cf=os.path.join(d,'confidences.npy'); lf=os.path.join(d,'labels.npy'); pf=os.path.join(d,'predictions.npy')
-    if not (os.path.exists(cf) and os.path.exists(lf) and os.path.exists(pf)):
-        print('[skip] missing arrays in', d)
-        return None, None
-    c=np.load(cf); y=np.load(lf); p=np.load(pf)
-    cov, acc = selective_prediction(c,p,y)
-    return 100 - cov, acc
-re_evi, ac_evi = load_curve(evi)
-re_sft, ac_sft = load_curve(soft)
-if re_evi is not None and re_sft is not None:
-    plt.figure(figsize=(8,5))
-    plt.plot(re_evi, ac_evi, 'b-o', label='EviMR-Net')
-    plt.plot(re_sft, ac_sft, 'r--o', label='Softmax')
-    plt.xlabel('Rejection rate (%)'); plt.ylabel('Accuracy (%)'); plt.title(f'{ds}: Accuracy vs Rejection'); plt.grid(True, alpha=0.3); plt.legend(); plt.tight_layout()
-    plt.savefig(os.path.join(base, ds, 'acc_vs_reject_compare.png'), dpi=300)
-    plt.close()
-
-# 不确定性分布（近似KDE：使用高分辨率直方图作为密度替代）
+ds = "$DS"; base = "$OUT_BASE"; evi = os.path.join(base, ds, 'evi')
 uf=os.path.join(evi,'uncertainties.npy'); lf=os.path.join(evi,'labels.npy'); pf=os.path.join(evi,'predictions.npy')
 if os.path.exists(uf) and os.path.exists(lf) and os.path.exists(pf):
     u = np.load(uf); y = np.load(lf); p = np.load(pf)
     err = (p!=y)
+    n1,_ = np.histogram(u[~err], bins=60, density=True)
+    n2,_ = np.histogram(u[err],  bins=60, density=True)
+    ymax = 1.1*max(n1.max() if n1.size else 0, n2.max() if n2.size else 0)
     plt.figure(figsize=(7,5))
-    plt.hist(u[~err], bins=60, density=True, alpha=0.4, label='Correct')
-    plt.hist(u[err],  bins=60, density=True, alpha=0.4, label='Misclassified')
+    plt.hist(u[~err], bins=60, density=True, alpha=0.45, color='#e1d89c', label='Correct')
+    plt.hist(u[ err], bins=60, density=True, alpha=0.45, color='#e1c59c', label='Misclassified')
+    plt.ylim(0, ymax)
     plt.xlabel('Uncertainty (u)'); plt.ylabel('Density'); plt.title(f'{ds}: Uncertainty Distribution (EviMR)'); plt.legend(); plt.tight_layout()
     plt.savefig(os.path.join(base, ds, 'uncert_density_evi.png'), dpi=300)
     plt.close()
-else:
-    print('[skip] missing uncertainty arrays in', evi)
 print('Saved compare curves & uncertainty density for', ds)
 PY
 

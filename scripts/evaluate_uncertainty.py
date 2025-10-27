@@ -6,6 +6,7 @@ MERIT不确定性评估 - ESWA核心实验
 """
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.metrics import roc_auc_score, accuracy_score
 import argparse
 import os
@@ -43,16 +44,31 @@ def selective_prediction(confidences, predictions, labels):
     
     return np.array(coverages), np.array(accuracies)
 
+def parse_palette(arg_str: str):
+    default = ['e1d89c','e1c59c','e1ae9c','e1909c','4a4a4a']
+    if not arg_str:
+        return ['#'+h for h in default]
+    parts = [p.strip().lstrip('#') for p in arg_str.split(',') if p.strip()]
+    if not parts:
+        parts = default
+    return ['#'+h for h in parts]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--uncertainty_dir', type=str, required=True)
     parser.add_argument('--dataset_name', type=str, default='APAVA')
     parser.add_argument('--output_dir', type=str, default='results/uncertainty')
+    parser.add_argument('--palette', type=str, default='e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a')
+    parser.add_argument('--reject_rate', type=float, default=20.0)
     args = parser.parse_args()
     
     os.makedirs(args.output_dir, exist_ok=True)
     
     print(f"\n评估 {args.dataset_name} 的不确定性...")
+    colors = parse_palette(args.palette)
+    sns.set_style('whitegrid')
+    plt.rcParams['font.size'] = 12
     
     # 加载数据
     try:
@@ -85,28 +101,34 @@ def main():
     print(f"\nUncertainty-Error Correlation: {corr:.4f}")
     
     # 4. 绘图
-    # Reliability Diagram
+    # Reliability Diagram（美化配色）
     plt.figure(figsize=(8, 6))
     x = np.arange(len(bin_accs))
-    plt.bar(x, bin_accs, alpha=0.7, label='Accuracy')
-    plt.plot(x, bin_confs, 'ro-', label='Confidence', linewidth=2)
+    plt.bar(x, bin_accs, color=colors[0], alpha=0.85, label='Accuracy')
+    plt.plot(x, bin_confs, color=colors[4], marker='o', label='Confidence', linewidth=2)
     plt.xlabel('Bin')
     plt.ylabel('Value')
     plt.title('Reliability Diagram')
     plt.legend()
-    plt.savefig(os.path.join(args.output_dir, f'{args.dataset_name}_reliability.png'), dpi=300)
+    out_png = os.path.join(args.output_dir, f'{args.dataset_name}_reliability.png')
+    out_svg = os.path.join(args.output_dir, f'{args.dataset_name}_reliability.svg')
+    plt.savefig(out_png, dpi=300)
+    plt.savefig(out_svg)
     plt.close()
     
-    # Selective Prediction
+    # Selective Prediction（美化配色）
     plt.figure(figsize=(10, 6))
-    plt.plot(coverages, accuracies, 'b-o', linewidth=2, label='MERIT')
-    plt.axhline(y=accuracy*100, color='r', linestyle='--', label=f'All samples: {accuracy*100:.2f}%')
+    plt.plot(coverages, accuracies, color=colors[3], marker='o', linewidth=2, label='MERIT')
+    plt.axhline(y=accuracy*100, color=colors[4], linestyle='--', label=f'All: {accuracy*100:.2f}%')
     plt.xlabel('Coverage (%)')
     plt.ylabel('Accuracy (%)')
     plt.title('Selective Prediction')
     plt.legend()
     plt.grid(True, alpha=0.3)
-    plt.savefig(os.path.join(args.output_dir, f'{args.dataset_name}_selective.png'), dpi=300)
+    out_png = os.path.join(args.output_dir, f'{args.dataset_name}_selective.png')
+    out_svg = os.path.join(args.output_dir, f'{args.dataset_name}_selective.svg')
+    plt.savefig(out_png, dpi=300)
+    plt.savefig(out_svg)
     plt.close()
     
     print(f"\n✅ 结果已保存到: {args.output_dir}")
@@ -122,6 +144,35 @@ def main():
         f.write("\\hline\n\\end{tabular}\n")
     
     print(f"LaTeX表格: {latex_file}\n")
+
+    # 5. 人机协同 triage 摘要与候选清单
+    rr = float(args.reject_rate)
+    rr = min(max(rr, 0.0), 100.0)
+    cov_target = 100.0 - rr
+    idx = (np.abs(coverages - cov_target)).argmin()
+    # 阈值：按置信度从高到低排序后第k个
+    k = max(1, int(len(confidences) * cov_target/100.0))
+    thr = np.sort(confidences)[::-1][k-1]
+    kept = confidences >= thr
+    acc_after = (predictions[kept] == labels[kept]).mean() * 100.0
+    summary = os.path.join(args.output_dir, 'triage_summary.txt')
+    with open(summary, 'w') as f:
+        f.write(f"Dataset: {args.dataset_name}\n")
+        f.write(f"Overall accuracy: {accuracy*100:.2f}%\n")
+        f.write(f"Reject rate: {rr:.1f}% (keep {cov_target:.1f}% samples)\n")
+        f.write(f"Accuracy after triage: {acc_after:.2f}% (gain {acc_after - accuracy*100:+.2f}%)\n")
+        f.write(f"Confidence threshold: {thr:.6f}\n")
+        f.write(f"Kept/Total: {kept.sum()}/{len(kept)}\n")
+    import csv
+    cand_path = os.path.join(args.output_dir, 'triage_candidates.csv')
+    order = np.argsort(confidences)  # 从低到高，最不自信优先
+    with open(cand_path, 'w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['index','label','prediction','uncertainty(approx)','confidence'])
+        for i in order[: max(1, int(len(confidences)*rr/100.0)) ]:
+            w.writerow([int(i), int(labels[i]), int(predictions[i]), float(1.0 - confidences[i]), float(confidences[i])])
+    print(f"Triage summary: {summary}")
+    print(f"Triage candidates: {cand_path}")
 
 if __name__ == '__main__':
     main()

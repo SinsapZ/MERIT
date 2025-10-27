@@ -281,6 +281,7 @@ class Exp_Classification(Exp_Basic):
                 all_alpha = []
                 all_pred = []
                 all_label = []
+                all_conf  = []
                 with torch.no_grad():
                     for batch_x, label, padding_mask in tqdm(test_loader, desc='Saving uncertainty'):
                         batch_x = batch_x.float().to(self.device)
@@ -289,26 +290,32 @@ class Exp_Classification(Exp_Basic):
                         if getattr(self.args, 'use_ds', False):
                             fused_alpha, _ = self.model(batch_x, padding_mask, None, None)
                             alpha = fused_alpha
-                            prob = alpha / torch.sum(alpha, dim=1, keepdim=True)
+                            S = torch.sum(alpha, dim=1, keepdim=True)
+                            prob = alpha / S
                             pred = torch.argmax(prob, dim=1)
+                            conf = torch.max(alpha, dim=1).values / S.squeeze(1)  # predictive mean of predicted class
                         else:
                             logits, _ = self.model(batch_x, padding_mask, None, None)
                             prob = torch.softmax(logits, dim=1)
-                            # as pseudo-alpha: alpha = prob * K  (approximate)
+                            # as pseudo-alpha for uncertainty only
                             K = prob.shape[1]
-                            alpha = prob * K
+                            alpha = prob * K  # keep for u computation
                             pred = torch.argmax(prob, dim=1)
+                            conf = torch.max(prob, dim=1).values  # max softmax prob as confidence
                         all_alpha.append(alpha.cpu())
                         all_pred.append(pred.cpu())
                         all_label.append(label.cpu())
+                        all_conf.append(conf.detach().cpu())
                 all_alpha = torch.cat(all_alpha, dim=0).numpy()
                 all_pred = torch.cat(all_pred, dim=0).numpy()
                 all_label = torch.cat(all_label, dim=0).numpy()
+                all_conf = torch.cat(all_conf, dim=0).numpy()
                 # uncertainty u = K / sum(alpha)
                 S = all_alpha.sum(axis=1, keepdims=True)
                 K = all_alpha.shape[1]
                 uncertainties = (K / S).squeeze(1)
-                confidences = 1.0 - uncertainties
+                # confidences: DS -> predictive max mean; Softmax -> max prob
+                confidences = all_conf
                 out_dir = self.args.uncertainty_dir if getattr(self.args, 'uncertainty_dir', '') else os.path.join('./checkpoints', self.args.task_name, self.args.model_id, self.args.model, setting, 'uncertainty')
                 os.makedirs(out_dir, exist_ok=True)
                 np.save(os.path.join(out_dir, 'uncertainties.npy'), uncertainties)
