@@ -100,6 +100,7 @@ run_one_dataset() {
   python - <<PY || true
 import os, numpy as np, matplotlib.pyplot as plt, seaborn as sns
 import pandas as pd
+from sklearn.metrics import roc_auc_score
 ds = "$DS"; base = "$OUT_BASE"; evi = os.path.join(base, ds, 'evi')
 uf=os.path.join(evi,'uncertainties.npy'); lf=os.path.join(evi,'labels.npy'); pf=os.path.join(evi,'predictions.npy')
 if os.path.exists(uf) and os.path.exists(lf) and os.path.exists(pf):
@@ -129,6 +130,17 @@ if os.path.exists(uf) and os.path.exists(lf) and os.path.exists(pf):
     plt.ylabel('Uncertainty (u)'); plt.title(f'{ds}: Uncertainty (zoom 0-0.05)'); plt.tight_layout()
     out=os.path.join(base, ds, 'uncert_density_evi_violin')
     plt.savefig(out+'.png', dpi=300); plt.savefig(out+'.svg'); plt.close()
+    # 分离度指标保存
+    try:
+        auc = roc_auc_score(err.astype(int), u)
+    except Exception:
+        auc = float('nan')
+    with open(os.path.join(base, ds, 'uncert_separation.txt'), 'w') as f:
+        f.write(f"mean u (correct) : {u[~err].mean():.6f}\n")
+        f.write(f"mean u (error)   : {u[err].mean():.6f}\n")
+        f.write(f"median u (correct): {np.median(u[~err]):.6f}\n")
+        f.write(f"median u (error)  : {np.median(u[err]):.6f}\n")
+        f.write(f"AUROC(u -> error) : {auc:.6f}\n")
 print('Saved compare curves & uncertainty density (KDE/violin) for', ds)
 PY
 
@@ -205,8 +217,63 @@ def noise_curve(ds, use_ds, model_id, root, res, e_layers, dropout, bs, lr, wd, 
     plt.close()
 
 ds = "$DS"; root = "$ROOT"; res = "$RES"; outb = "$OUT_BASE"
-noise_curve(ds, True,  f'UNCERT-{ds}-EVI',  root, res, $E_LAYERS, $DROPOUT, $BATCH_SIZE, $LR, $WD, $SEED, $GPU, os.path.join(outb, ds, 'noise_evi.png'))
-noise_curve(ds, False, f'UNCERT-{ds}-SOFT', root, res, $E_LAYERS, $DROPOUT, $BATCH_SIZE, $LR, $WD, $SEED, $GPU, os.path.join(outb, ds, 'noise_soft.png'))
+ noise_curve(ds, True,  f'UNCERT-{ds}-EVI',  root, res, $E_LAYERS, $DROPOUT, $BATCH_SIZE, $LR, $WD, $SEED, $GPU, os.path.join(outb, ds, 'noise_evi.png'))
+ noise_curve(ds, False, f'UNCERT-{ds}-SOFT', root, res, $E_LAYERS, $DROPOUT, $BATCH_SIZE, $LR, $WD, $SEED, $GPU, os.path.join(outb, ds, 'noise_soft.png'))
+ # 组合对比图（同坐标轴）
+ def compute_curve(ds, use_ds):
+     # 与 noise_curve 相同设置，但仅返回数据
+     from MERIT.exp.exp_classification import Exp_Classification
+     import argparse as ap, torch, numpy as np
+     args = ap.Namespace(task_name='classification', model_id=f'UNCERT-{ds}-EVI' if use_ds else f'UNCERT-{ds}-SOFT', model='MERIT',
+                        data=ds, root_path=root, use_gpu=True, use_multi_gpu=False, devices='0', gpu=$GPU,
+                        freq='h', embed='timeF', output_attention=False, activation='gelu',
+                        single_channel=False, augmentations='none,drop0.35', no_freq=False, no_diff=False,
+                        use_gnn=False, use_evi_loss=False, lambda_evi=1.0, agg='evi', lambda_pseudo=1.0,
+                        evidence_act='softplus', evidence_dropout=0.0,
+                        d_model=$D_MODEL, d_ff=$D_FF, n_heads=$N_HEADS,
+                        e_layers=$E_LAYERS, dropout=$DROPOUT, resolution_list=res,
+                        nodedim=$NODEDIM, batch_size=$BATCH_SIZE, train_epochs=$EPOCHS, patience=$PATIENCE,
+                        learning_rate=$LR, use_ds=use_ds, swa=True, weight_decay=$WD,
+                        lr_scheduler='none', warmup_epochs=0, seed=$SEED, num_workers=4)
+     exp = Exp_Classification(args)
+     _, tl = exp._get_data(flag='TEST')
+     sigmas = [0.0, 0.02, 0.05, 0.10, 0.20, 0.30]
+     f1=[]; exp.model.eval()
+     with torch.no_grad():
+         for s in sigmas:
+             y_all=[]; p_all=[]
+             for bx, y, pm in tl:
+                 bx = bx.float()
+                 if s>0: bx = bx + s*torch.randn_like(bx)
+                 pm = pm.float()
+                 bx = bx.cuda(); pm = pm.cuda(); y = y.cuda()
+                 if use_ds:
+                     alpha,_ = exp.model(bx, pm, None, None); prob = alpha/alpha.sum(dim=1, keepdim=True)
+                 else:
+                     logits,_ = exp.model(bx, pm, None, None); prob = torch.softmax(logits, dim=1)
+                 pred = prob.argmax(dim=1)
+                 y_all.append(y.cpu().numpy()); p_all.append(pred.cpu().numpy())
+             import numpy as np
+             from sklearn.metrics import f1_score
+             y_all = np.concatenate(y_all); p_all = np.concatenate(p_all)
+             f1.append(f1_score(y_all, p_all, average='macro'))
+     # 平滑
+     def smooth(a):
+         a = np.array(a, dtype=float)
+         if a.size < 3: return a
+         s = a.copy()
+         for i in range(1, a.size-1): s[i]=(a[i-1]+a[i]+a[i+1])/3.0
+         return s
+     return sigmas, smooth(f1)
+ sig_e, f1_e = compute_curve(ds, True)
+ sig_s, f1_s = compute_curve(ds, False)
+ import matplotlib.pyplot as plt
+ plt.figure(figsize=(7,4.5))
+ plt.plot(sig_e, f1_e, 'o-', color='#e1909c', label='EviMR-Net')
+ plt.plot(sig_s, f1_s, 'o--', color='#4a4a4a', label='Softmax')
+ plt.xlabel('Gaussian noise sigma'); plt.ylabel('F1'); plt.title(f'{ds}: Noise Robustness (Comparison)'); plt.grid(True, alpha=0.3); plt.legend(); plt.tight_layout()
+ out=os.path.join(outb, ds, 'noise_compare')
+ plt.savefig(out+'.png', dpi=300); plt.savefig(out+'.svg'); plt.close()
 print('Saved noise robustness for', ds)
 PY
 
