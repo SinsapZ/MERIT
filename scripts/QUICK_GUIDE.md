@@ -47,12 +47,63 @@ bash MERIT/scripts/run_ablation.sh PTB-XL 0
 bash MERIT/scripts/run_ablation.sh ADFD-Sample 0
 ```
 
-### 4️⃣ 不确定性分析（ESWA核心，需修改代码）
+### 4️⃣ 不确定性分析（一键执行 + 人机协同产物 + SVG 导出）
 
+一键运行三数据集（APAVA, PTB, PTB-XL）：
 ```bash
-python MERIT/scripts/evaluate_uncertainty.py --uncertainty_dir <path>
-python MERIT/scripts/analyze_uncertainty.py --uncertainty_dir <path>
+bash MERIT/scripts/run_uncertainty_all.sh 0
 ```
+
+输出（每个数据集 `results/uncertainty/<DATASET>/`）：
+- evi/ 与 softmax/: uncertainties.npy, confidences.npy, predictions.npy, labels.npy
+- 单方法图（PNG+SVG）：
+  - plots_evi/<DATASET>_reliability.png|svg（可靠度图）
+  - plots_evi/<DATASET>_selective.png|svg（选择性预测）
+  - 同理 plots_soft/ 下为 Softmax 基线
+- 对比图（PNG+SVG）：
+  - acc_vs_reject_compare.png|svg（EviMR vs Softmax）
+- 不确定度分布（自适应y上限）：
+  - uncert_density_evi.png
+- 噪声鲁棒性：
+  - noise_evi.png, noise_soft.png
+- 人机协同（默认拒绝率20%）：
+  - plots_evi/triage_summary.txt（放行后准确率提升等）
+  - plots_evi/triage_candidates.csv（最不自信样本清单，供医生复核）
+- 案例图：
+  - cases/sample*_wave.png, sample*_prob.png
+
+只跑单个数据集（以 APAVA 为例）：
+```bash
+# 训练并保存不确定性数组
+python -m MERIT.run --model MERIT --data APAVA --root_path /home/Data1/zbl/dataset/APAVA \
+  --use_ds --learning_rate 1e-4 --lambda_fuse 1.0 --lambda_view 1.0 --lambda_pseudo_loss 0.3 \
+  --annealing_epoch 50 --resolution_list 2,4,6,8 --batch_size 64 --train_epochs 150 --patience 20 \
+  --e_layers 4 --dropout 0.1 --weight_decay 1e-4 --nodedim 10 --gpu 0 --swa \
+  --save_uncertainty --uncertainty_dir results/uncertainty/APAVA/evi
+
+python -m MERIT.run --model MERIT --data APAVA --root_path /home/Data1/zbl/dataset/APAVA \
+  --learning_rate 1e-4 --resolution_list 2,4,6,8 --batch_size 64 --train_epochs 150 --patience 20 \
+  --e_layers 4 --dropout 0.1 --weight_decay 1e-4 --nodedim 10 --gpu 0 --swa \
+  --save_uncertainty --uncertainty_dir results/uncertainty/APAVA/softmax
+
+# 单方法评估（支持自定义调色板与拒绝率，导出PNG+SVG）
+python -m MERIT.scripts.evaluate_uncertainty \
+  --uncertainty_dir results/uncertainty/APAVA/evi \
+  --dataset_name APAVA \
+  --output_dir results/uncertainty/APAVA/plots_evi \
+  --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' \
+  --reject_rate 20
+
+# EviMR vs Softmax 对比曲线（导出PNG+SVG）
+python -m MERIT.scripts.compare_selective \
+  --base_dir results/uncertainty/APAVA \
+  --dataset APAVA \
+  --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a'
+```
+
+配色规范（Tailwind）：
+- Vanilla #e1d89c, Tan #e1c59c, Melon #e1ae9c, Puce #e1909c, Davy’s gray #4a4a4a
+- 约定：EviMR 主线用 Puce，Softmax 主线用 Davy’s gray；辅助填充用 Vanilla/Tan/Melon。
 
 ### 5️⃣ 生成论文表格
 

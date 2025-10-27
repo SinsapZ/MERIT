@@ -51,12 +51,23 @@ def main():
         print('Missing arrays under evi/ or softmax/.')
         return
 
+    # simple smoothing to减少抖动（3点移动平均，不改变端点数量）
+    def smooth(y):
+        if y.size < 3:
+            return y
+        ys = y.copy()
+        for i in range(1, y.size-1):
+            ys[i] = (y[i-1] + y[i] + y[i+1]) / 3.0
+        return ys
+    ac_e_s = smooth(ac_e)
+    ac_s_s = smooth(ac_s)
+
     plt.figure(figsize=(8,5))
-    plt.plot(re_e, ac_e, color=colors[3], marker='o', linewidth=2, label='EviMR-Net')
-    plt.plot(re_s, ac_s, color=colors[4], marker='o', linestyle='--', linewidth=2, label='Softmax')
+    plt.plot(re_e, ac_e_s, color=colors[3], marker='o', linewidth=2, label='EviMR-Net')
+    plt.plot(re_s, ac_s_s, color=colors[4], marker='o', linestyle='--', linewidth=2, label='Softmax')
     plt.xlabel('Rejection rate (%)'); plt.ylabel('Accuracy (%)')
     plt.title(f'{args.dataset}: Accuracy vs Rejection')
-    plt.grid(True, alpha=0.3); plt.legend(); plt.tight_layout()
+    plt.grid(True, alpha=0.3, linestyle=':'); plt.legend(); plt.tight_layout()
     out_png = os.path.join(args.base_dir, 'acc_vs_reject_compare.png')
     out_svg = os.path.join(args.base_dir, 'acc_vs_reject_compare.svg')
     plt.savefig(out_png, dpi=300)

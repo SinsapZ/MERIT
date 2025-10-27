@@ -117,8 +117,18 @@ def main():
     plt.close()
     
     # Selective Prediction（美化配色）
+    # 3点移动平均平滑选择性曲线（不改变端点数量）
+    def smooth(y):
+        if y.size < 3:
+            return y
+        ys = y.copy()
+        for i in range(1, y.size-1):
+            ys[i] = (y[i-1] + y[i] + y[i+1]) / 3.0
+        return ys
+    acc_s = smooth(accuracies)
+
     plt.figure(figsize=(10, 6))
-    plt.plot(coverages, accuracies, color=colors[3], marker='o', linewidth=2, label='MERIT')
+    plt.plot(coverages, acc_s, color=colors[3], marker='o', linewidth=2, label='MERIT')
     plt.axhline(y=accuracy*100, color=colors[4], linestyle='--', label=f'All: {accuracy*100:.2f}%')
     plt.xlabel('Coverage (%)')
     plt.ylabel('Accuracy (%)')
