@@ -97,7 +97,7 @@ run_one_dataset() {
 
   # --- 4) 叠加比较：准确率-拒绝率曲线 & 不确定性分布 ---
   python -m MERIT.scripts.compare_selective --base_dir "$OUT_BASE/$DS" --dataset "$DS" --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' || true
-  python - <<'PY' || true
+  python - <<PY || true
 import os, numpy as np, matplotlib.pyplot as plt, seaborn as sns
 import pandas as pd
 from sklearn.metrics import roc_auc_score
@@ -145,7 +145,7 @@ print('Saved compare curves & uncertainty density (KDE/violin) for', ds)
 PY
 
   # --- 5) 噪声鲁棒性（EviMR与Softmax） ---
-  python - <<'PY' || true
+  python - <<PY || true
 import os, torch, numpy as np, matplotlib.pyplot as plt
 from sklearn.metrics import f1_score
 from MERIT.exp.exp_classification import Exp_Classification
