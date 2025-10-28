@@ -93,7 +93,6 @@ def plot_cases(ds, root, res, out_base, plots_evi_dir,
             S=alpha.sum(dim=1, keepdim=True); prob=alpha/S
             K=prob.shape[1]; u=(K/S).squeeze(1); conf=prob.max(dim=1).values; pred=prob.argmax(dim=1)
             all_u.append(u.cpu()); all_conf.append(conf.cpu()); all_pred.append(pred.cpu())
-    import torch
     all_u=torch.cat(all_u,dim=0).numpy(); all_conf=torch.cat(all_conf,dim=0).numpy(); all_pred=torch.cat(all_pred,dim=0).numpy()
 
     idx_all=np.arange(len(all_u))
