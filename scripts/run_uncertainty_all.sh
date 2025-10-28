@@ -97,7 +97,7 @@ run_one_dataset() {
 
   # --- 4) 叠加比较：准确率-拒绝率曲线 & 不确定性分布 ---
   python -m MERIT.scripts.compare_selective --base_dir "$OUT_BASE/$DS" --dataset "$DS" --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' || true
-  python - <<PY || true
+  python - <<'PY' || true
 import os, numpy as np, matplotlib.pyplot as plt, seaborn as sns
 import pandas as pd
 from sklearn.metrics import roc_auc_score
@@ -145,7 +145,7 @@ print('Saved compare curves & uncertainty density (KDE/violin) for', ds)
 PY
 
   # --- 5) 噪声鲁棒性（EviMR与Softmax） ---
-  python - <<PY || true
+  python - <<'PY' || true
 import os, torch, numpy as np, matplotlib.pyplot as plt
 from sklearn.metrics import f1_score
 from MERIT.exp.exp_classification import Exp_Classification
@@ -217,8 +217,8 @@ def noise_curve(ds, use_ds, model_id, root, res, e_layers, dropout, bs, lr, wd, 
     plt.close()
 
 ds = "$DS"; root = "$ROOT"; res = "$RES"; outb = "$OUT_BASE"
-    noise_curve(ds, True,  f'UNCERT-{ds}-EVI',  root, res, $E_LAYERS, $DROPOUT, $BATCH_SIZE, $LR, $WD, $SEED, $GPU, os.path.join(outb, ds, 'noise_evi.png'))
-    noise_curve(ds, False, f'UNCERT-{ds}-SOFT', root, res, $E_LAYERS, $DROPOUT, $BATCH_SIZE, $LR, $WD, $SEED, $GPU, os.path.join(outb, ds, 'noise_soft.png'))
+noise_curve(ds, True,  f'UNCERT-{ds}-EVI',  root, res, $E_LAYERS, $DROPOUT, $BATCH_SIZE, $LR, $WD, $SEED, $GPU, os.path.join(outb, ds, 'noise_evi.png'))
+noise_curve(ds, False, f'UNCERT-{ds}-SOFT', root, res, $E_LAYERS, $DROPOUT, $BATCH_SIZE, $LR, $WD, $SEED, $GPU, os.path.join(outb, ds, 'noise_soft.png'))
     # 组合对比图（同坐标轴）
     def compute_curve(ds, use_ds):
         # 与 noise_curve 相同设置，但仅返回数据
@@ -277,13 +277,14 @@ plt.savefig(out+'.png', dpi=300); plt.savefig(out+'.svg'); plt.close()
 print('Saved noise robustness for', ds)
 PY
 
-  # --- 6) 案例图（2-3个样本，EviMR） ---
+  # --- 6) 案例图（高/低不确定度各Top-6） ---
   python -m MERIT.scripts.plot_cases \
     --dataset "$DS" \
     --root_path "$ROOT" \
     --resolution_list "$RES" \
     --uncertainty_base "$OUT_BASE/$DS" \
-    --top_k 6 \
+    --top_k_high 6 \
+    --top_k_low 6 \
     --gpu "$GPU" || true
 }
 
