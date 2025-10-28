@@ -75,7 +75,7 @@ run_eval_dataset() {
   python -m MERIT.scripts.compare_selective --base_dir "$OUT_BASE/$DS" --dataset "$DS" --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' || true
 
   # 5) KDE/Violin（近零聚焦 + 中位线 + 分离度报告）
-  python - <<PY || true
+  python - <<'PY' || true
 import os, numpy as np, matplotlib.pyplot as plt, seaborn as sns, pandas as pd
 from sklearn.metrics import roc_auc_score
 ds="$DS"; base="$OUT_BASE"; evi=os.path.join(base, ds, 'evi')
@@ -93,7 +93,7 @@ if os.path.exists(uf) and os.path.exists(lf) and os.path.exists(pf):
     plt.xlabel('Uncertainty (u)'); plt.ylabel('Density'); plt.title(f'{ds}: Uncertainty Distribution (EviMR)'); plt.legend(); plt.tight_layout()
     out=os.path.join(base, ds, 'uncert_density_evi_kde'); plt.savefig(out+'.png', dpi=300); plt.savefig(out+'.svg'); plt.close()
     df=pd.DataFrame({'u':np.concatenate([u[~err],u[err]]),'group':['Correct']*int((~err).sum())+['Misclassified']*int(err.sum())}); df=df[df['u']<=0.05]
-    plt.figure(figsize=(6,4)); sns.violinplot(data=df, x='group', y='u', palette={'Correct':'#e1d89c','Misclassified':'#e1c59c'}, cut=0, inner=None)
+    plt.figure(figsize=(6,4)); sns.violinplot(data=df, x='group', y='u', hue='group', palette={'Correct':'#e1d89c','Misclassified':'#e1c59c'}, dodge=False, cut=0, inner=None, legend=False)
     med=df.groupby('group')['u'].median();
     import matplotlib.pyplot as plt
     for i,(g,v) in enumerate(med.items()): plt.plot([i-0.2,i+0.2],[v,v], color='#4a4a4a', linewidth=2)
@@ -106,7 +106,7 @@ print('Saved density/KDE/violin for', ds)
 PY
 
   # 6) 噪声鲁棒性（同轴对比 + 各自单图已在 compare/noise 中生成）
-  python - <<PY || true
+  python - <<'PY' || true
 import os, torch, numpy as np, matplotlib.pyplot as plt
 from sklearn.metrics import f1_score
 from MERIT.exp.exp_classification import Exp_Classification
