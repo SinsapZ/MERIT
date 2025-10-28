@@ -76,52 +76,47 @@ def build_exp(ds, root, res, e_layers, d_model, d_ff, n_heads, batch_size, lr, g
     return exp
 
 
-def plot_cases(ds, root, res, out_base, plots_evi_dir, top_k=6, gpu=0, e_layers=4, d_model=256, d_ff=512, n_heads=8, batch_size=64, lr=1e-4, seed=41):
+def plot_cases(ds, root, res, out_base, plots_evi_dir,
+               top_k_high=6, top_k_low=6,
+               gpu=0, e_layers=4, d_model=256, d_ff=512, n_heads=8, batch_size=64, lr=1e-4, seed=41):
     os.makedirs(out_base, exist_ok=True)
-    selected = load_triage(plots_evi_dir, top_k)
     exp = build_exp(ds, root, res, e_layers, d_model, d_ff, n_heads, batch_size, lr, gpu, seed, use_ds=True)
-    test_data, _ = exp._get_data(flag='TEST')
+    test_data, test_loader = exp._get_data(flag='TEST')
     exp.model.eval()
 
-    for k, row in enumerate(selected):
-        idx = row['index']
-        label = row['label']
-        # 取波形
-        x = test_data.X[idx]  # (T, C)
-        # 推理概率
+    # 全量计算 u/conf/pred
+    all_u=[]; all_conf=[]; all_pred=[]
+    with torch.no_grad():
+        for bx, y, pm in test_loader:
+            bx=bx.float().to(exp.device); pm=pm.float().to(exp.device)
+            alpha,_=exp.model(bx, pm, None, None)
+            S=alpha.sum(dim=1, keepdim=True); prob=alpha/S
+            K=prob.shape[1]; u=(K/S).squeeze(1); conf=prob.max(dim=1).values; pred=prob.argmax(dim=1)
+            all_u.append(u.cpu()); all_conf.append(conf.cpu()); all_pred.append(pred.cpu())
+    import torch
+    all_u=torch.cat(all_u,dim=0).numpy(); all_conf=torch.cat(all_conf,dim=0).numpy(); all_pred=torch.cat(all_pred,dim=0).numpy()
+
+    idx_all=np.arange(len(all_u))
+    hi_idx=idx_all[np.argsort(all_u)[-top_k_high:]][::-1]
+    lo_idx=idx_all[np.argsort(all_u)[:top_k_low]]
+
+    def render_case(idx, tag):
+        x=test_data.X[idx]; label=int(test_data.y[idx])
         with torch.no_grad():
-            bx = torch.from_numpy(x).float().unsqueeze(0).to(exp.device)
-            pm = torch.zeros((1, x.shape[0])).float().to(exp.device)
-            alpha,_ = exp.model(bx, pm, None, None)  # fused alpha
-            S = alpha.sum(dim=1, keepdim=True)
-            prob = (alpha / S).squeeze(0).cpu().numpy()
-            pred = int(prob.argmax())
-            K = prob.shape[0]
-            u = float((K / S).item())
-            conf = float(prob.max())
+            bx=torch.from_numpy(x).float().unsqueeze(0).to(exp.device); pm=torch.zeros((1,x.shape[0])).float().to(exp.device)
+            alpha,_=exp.model(bx,pm,None,None); S=alpha.sum(dim=1,keepdim=True); prob=(alpha/S).squeeze(0).cpu().numpy(); pred=int(prob.argmax()); K=prob.shape[0]; u=float((K/S).item()); conf=float(prob.max())
+        out_dir=os.path.join(out_base,'cases'); os.makedirs(out_dir,exist_ok=True)
+        plt.figure(figsize=(8,2)); plt.plot(x[:,0], color=PALETTE['gray'])
+        plt.title(f'Waveform (ch=0)  label={label}  pred={pred}  conf={conf:.3f}  u={u:.6f}')
+        plt.tight_layout(); base=os.path.join(out_dir,f'clinical_{tag}_wave'); plt.savefig(base+'.png',dpi=300); plt.savefig(base+'.svg'); plt.close()
+        colors=[PALETTE['vanilla']]*K; colors[pred]=PALETTE['puce']
+        plt.figure(figsize=(4.2,3.4)); plt.bar(np.arange(K), prob, color=colors); plt.ylim(0,1.0)
+        plt.title(f'Prob (pred={pred}, u={u:.6f})'); plt.tight_layout(); base=os.path.join(out_dir,f'clinical_{tag}_prob'); plt.savefig(base+'.png',dpi=300); plt.savefig(base+'.svg'); plt.close()
 
-        out_dir = os.path.join(out_base, 'cases')
-        os.makedirs(out_dir, exist_ok=True)
+    for r,i in enumerate(hi_idx): render_case(int(i), f'hi_u_{r}')
+    for r,i in enumerate(lo_idx): render_case(int(i), f'lo_u_{r}')
 
-        # 1) 波形
-        plt.figure(figsize=(8,2))
-        plt.plot(x[:,0], color=PALETTE['gray'])
-        plt.title(f'Waveform (ch=0)  label={label}  pred={pred}  conf={conf:.3f}  u={u:.3f}')
-        plt.tight_layout()
-        base = os.path.join(out_dir, f'clinical_case_{k}_wave')
-        plt.savefig(base+'.png', dpi=300); plt.savefig(base+'.svg'); plt.close()
-
-        # 2) 概率柱状图（高亮预测类）
-        colors = [PALETTE['vanilla']]*K
-        colors[pred] = PALETTE['puce']
-        plt.figure(figsize=(4.2,3.4))
-        plt.bar(np.arange(K), prob, color=colors)
-        plt.title(f'Prob (pred={pred}, u={u:.3f})')
-        plt.tight_layout()
-        base = os.path.join(out_dir, f'clinical_case_{k}_prob')
-        plt.savefig(base+'.png', dpi=300); plt.savefig(base+'.svg'); plt.close()
-
-    print(f'Saved clinical cases to: {out_base}/cases')
+    print(f'Saved clinical cases (high/low u) to: {out_base}/cases')
 
 
 def main():
@@ -130,7 +125,8 @@ def main():
     ap.add_argument('--root_path', type=str, required=True)
     ap.add_argument('--resolution_list', type=str, required=True)
     ap.add_argument('--uncertainty_base', type=str, required=True, help='results/uncertainty/<DATASET>')
-    ap.add_argument('--top_k', type=int, default=6)
+    ap.add_argument('--top_k_high', type=int, default=6)
+    ap.add_argument('--top_k_low', type=int, default=6)
     ap.add_argument('--gpu', type=int, default=0)
     ap.add_argument('--e_layers', type=int, default=4)
     ap.add_argument('--d_model', type=int, default=256)
@@ -145,7 +141,8 @@ def main():
     plot_cases(args.dataset, args.root_path, args.resolution_list,
                out_base=args.uncertainty_base,
                plots_evi_dir=plots_evi_dir,
-               top_k=args.top_k, gpu=args.gpu, e_layers=args.e_layers,
+               top_k_high=args.top_k_high, top_k_low=args.top_k_low,
+               gpu=args.gpu, e_layers=args.e_layers,
                d_model=args.d_model, d_ff=args.d_ff, n_heads=args.n_heads,
                batch_size=args.batch_size, lr=args.lr, seed=args.seed)
 
