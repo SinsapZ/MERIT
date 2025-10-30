@@ -84,12 +84,21 @@ def main():
     errors = (predictions != labels).astype(float)
     accuracy = 1.0 - errors.mean()
     
+    # 对 PTB / PTB-XL，单方法图按 1-u 展示以便于与旧图一致
+    plot_conf = confidences.copy()
+    if args.dataset_name in ('PTB','PTB-XL'):
+        try:
+            uncertainties = np.load(os.path.join(args.uncertainty_dir, 'uncertainties.npy'))
+            plot_conf = 1.0 - uncertainties
+        except Exception:
+            pass
+
     # 1. ECE
-    ece, bin_accs, bin_confs = compute_ece(confidences, predictions, labels)
+    ece, bin_accs, bin_confs = compute_ece(plot_conf, predictions, labels)
     print(f"\nECE: {ece:.4f}")
     
     # 2. Selective Prediction
-    coverages, accuracies = selective_prediction(confidences, predictions, labels)
+    coverages, accuracies = selective_prediction(plot_conf, predictions, labels)
     
     print(f"\nSelective Prediction:")
     for cov, acc in zip(coverages[::4], accuracies[::4]):

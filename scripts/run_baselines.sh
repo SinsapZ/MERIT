@@ -55,8 +55,16 @@ echo "========================================================"
 
 mkdir -p results/baselines/$DATASET
 
-# 切换到MedGNN目录
-cd MedGNN/MedGNN
+# 计算仓库根目录（本脚本位于 MERIT/MERIT/scripts 下）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# 切到 MedGNN 目录
+if [ -d "$REPO_ROOT/MedGNN/MedGNN" ]; then
+  pushd "$REPO_ROOT/MedGNN/MedGNN" >/dev/null
+else
+  echo "MedGNN/MedGNN 不存在，无法运行 Medformer/iTransformer 基线。"; exit 1
+fi
 
 # ============================================================
 # Baseline 1: Medformer
@@ -89,7 +97,7 @@ for seed in ${SEEDS//,/ }; do
         --gpu $GPU \
         --seed $seed \
         2>&1 | grep -E "(Validation|Test) results"
-done > ../../results/baselines/$DATASET/medformer_results.txt
+done > "$REPO_ROOT/results/baselines/$DATASET/medformer_results.txt"
 
 # ============================================================
 # Baseline 2: iTransformer
@@ -122,7 +130,7 @@ for seed in ${SEEDS//,/ }; do
         --gpu $GPU \
         --seed $seed \
         2>&1 | grep -E "(Validation|Test) results"
-done > ../../results/baselines/$DATASET/itransformer_results.txt
+done > "$REPO_ROOT/results/baselines/$DATASET/itransformer_results.txt"
 
 # ============================================================
 # Baseline 3: FEDformer (来自独立项目)
@@ -132,8 +140,13 @@ echo "========================================================"
 echo "Running FEDformer on $DATASET"
 echo "========================================================"
 
-# 切换到FEDformer目录（项目根目录下的 FEDformer/FEDformer）
-cd ../../FEDformer/FEDformer || { echo "FEDformer 项目不存在，跳过"; cd - >/dev/null; }
+# 切换到 FEDformer 目录（项目根目录下的 FEDformer/FEDformer）
+popd >/dev/null
+if [ -d "$REPO_ROOT/FEDformer/FEDformer" ]; then
+  pushd "$REPO_ROOT/FEDformer/FEDformer" >/dev/null
+else
+  echo "未找到 FEDformer/FEDformer，跳过FEDformer基线。"
+fi
 
 if [ -f run.py ]; then
     for seed in ${SEEDS//,/ }; do
@@ -159,12 +172,12 @@ if [ -f run.py ]; then
             --itr 1 \
             --des Baseline-FED \
             2>&1
-    done > ../../results/baselines/$DATASET/fedformer_results.txt
+    done > "$REPO_ROOT/results/baselines/$DATASET/fedformer_results.txt"
 else
     echo "未找到 FEDformer/run.py，跳过FEDformer基线。"
 fi
 
-# 继续进行下一个基线
+popd >/dev/null
 
 # ============================================================
 # Baseline 4: CrossGNN (来自独立项目)
@@ -174,8 +187,12 @@ echo "========================================================"
 echo "Running CrossGNN on $DATASET"
 echo "========================================================"
 
-# 切换到CrossGNN目录（项目根目录下的 CrossGNN/CrossGNN）
-cd ../../CrossGNN/CrossGNN || { echo "CrossGNN 项目不存在，跳过"; cd - >/dev/null; }
+# 切换到 CrossGNN 目录（项目根目录下的 CrossGNN/CrossGNN）
+if [ -d "$REPO_ROOT/CrossGNN/CrossGNN" ]; then
+  pushd "$REPO_ROOT/CrossGNN/CrossGNN" >/dev/null
+else
+  echo "未找到 CrossGNN/CrossGNN，跳过CrossGNN基线。"
+fi
 
 if [ -f run_longExp.py ]; then
     for seed in ${SEEDS//,/ }; do
@@ -201,13 +218,12 @@ if [ -f run_longExp.py ]; then
             --itr 1 \
             --des Baseline-CrossGNN \
             2>&1
-    done > ../../results/baselines/$DATASET/crossgnn_results.txt
+    done > "$REPO_ROOT/results/baselines/$DATASET/crossgnn_results.txt"
 else
     echo "未找到 CrossGNN/run_longExp.py，跳过CrossGNN基线。"
 fi
 
-# 返回到仓库根目录
-cd ../..
+popd >/dev/null
 
 # ============================================================
 # Baseline 3: MedGNN (参考)
@@ -218,8 +234,8 @@ echo "MedGNN Results (从论文)"
 echo "说明: MedGNN的结果可以直接从论文中引用"
 echo "========================================================"
 
-# 返回MERIT目录
-cd ../..
+# 留在脚本所在目录（可选）
+cd "$SCRIPT_DIR"
 
 echo ""
 echo "========================================================"

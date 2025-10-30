@@ -35,11 +35,22 @@ def main():
     err = (p != y)
     sns.set_style('whitegrid')
 
-    # KDE 0-0.05
+    # KDE 0-0.05（自适应y轴上限，避免数值过大）
     plt.figure(figsize=(7, 5))
     sns.kdeplot(u[~err], bw_method=0.2, fill=True, alpha=0.35, color='#e1d89c', label='Correct', clip=(0, 0.05))
     sns.kdeplot(u[err],  bw_method=0.2, fill=True, alpha=0.35, color='#e1c59c', label='Misclassified', clip=(0, 0.05))
     plt.xlim(0, 0.05)
+    # 估计直方图密度并设置上限为99分位的1.2倍，避免“尖峰”破坏观感
+    try:
+        uc = u[~err]; ue = u[err]
+        uc = uc[(uc>=0)&(uc<=0.05)]; ue = ue[(ue>=0)&(ue<=0.05)]
+        dens_c,_ = np.histogram(uc, bins=200, range=(0,0.05), density=True)
+        dens_e,_ = np.histogram(ue, bins=200, range=(0,0.05), density=True)
+        ymax = np.percentile(np.concatenate([dens_c, dens_e]), 99)*1.2
+        if np.isfinite(ymax) and ymax>0:
+            plt.ylim(0, float(ymax))
+    except Exception:
+        pass
     plt.axvline(np.median(u[~err]), color='#e1d89c', linestyle='--', alpha=0.8)
     plt.axvline(np.median(u[err]),  color='#e1c59c', linestyle='--', alpha=0.8)
     plt.xlabel('Uncertainty (u)'); plt.ylabel('Density'); plt.title(f'{args.dataset}: Uncertainty Distribution (EviMR)'); plt.legend(); plt.tight_layout()

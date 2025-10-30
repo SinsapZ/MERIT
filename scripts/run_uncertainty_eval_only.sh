@@ -11,10 +11,11 @@ GPU=${1:-0}
 declare -A ROOTS
 declare -A LRS
 declare -A RES_LIST
+declare -A LAMBDA_PSEUDO_LOSS
 
-ROOTS[APAVA]="/home/Data1/zbl/dataset/APAVA";   LRS[APAVA]="1e-4";  RES_LIST[APAVA]="2,4,6,8"
-ROOTS[PTB]="/home/Data1/zbl/dataset/PTB";       LRS[PTB]="1.5e-4"; RES_LIST[PTB]="2,4,6,8"
-ROOTS["PTB-XL"]="/home/Data1/zbl/dataset/PTB-XL"; LRS["PTB-XL"]="1.5e-4"; RES_LIST["PTB-XL"]="2,4,6,8"
+ROOTS[APAVA]="/home/Data1/zbl/dataset/APAVA";     LRS[APAVA]="1e-4";    RES_LIST[APAVA]="2,4,6,8";   LAMBDA_PSEUDO_LOSS[APAVA]="0.3"
+ROOTS[PTB]="/home/Data1/zbl/dataset/PTB";         LRS[PTB]="1.5e-4";   RES_LIST[PTB]="2,4,6,8";     LAMBDA_PSEUDO_LOSS[PTB]="0.2"
+ROOTS["PTB-XL"]="/home/Data1/zbl/dataset/PTB-XL"; LRS["PTB-XL"]="1.5e-4"; RES_LIST["PTB-XL"]="2,4,6,8"; LAMBDA_PSEUDO_LOSS["PTB-XL"]="0.3"
 
 E_LAYERS=4; D_MODEL=256; D_FF=512; N_HEADS=8; DROPOUT=0.1; WD=1e-4; BATCH=64; EPOCHS=150; PATIENCE=20; ANNEAL=50; NODEDIM=10; SEED=41
 
@@ -25,6 +26,7 @@ run_eval_dataset() {
   local ROOT=${ROOTS[$DS]}
   local LR=${LRS[$DS]}
   local RES=${RES_LIST[$DS]}
+  local LPL=${LAMBDA_PSEUDO_LOSS[$DS]}
   echo "\n================ EVAL ONLY: $DS ================"
 
   local EVI_DIR="$OUT_BASE/$DS/evi";     mkdir -p "$EVI_DIR"
@@ -40,7 +42,7 @@ run_eval_dataset() {
     --root_path "$ROOT" \
     --use_ds \
     --learning_rate "$LR" \
-    --lambda_fuse 1.0 --lambda_view 1.0 --lambda_pseudo_loss 0.3 \
+    --lambda_fuse 1.0 --lambda_view 1.0 --lambda_pseudo_loss "$LPL" \
     --annealing_epoch "$ANNEAL" \
     --resolution_list "$RES" \
     --batch_size "$BATCH" --train_epochs "$EPOCHS" --patience "$PATIENCE" \
@@ -78,7 +80,33 @@ run_eval_dataset() {
   python -m MERIT.scripts.make_uncert_density --base_dir "$OUT_BASE/$DS" --dataset "$DS" || true
 
   # 6) 噪声鲁棒性（同轴对比 + 单方法曲线）
-  python -m MERIT.scripts.make_noise_compare --dataset "$DS" --root_path "$ROOT" --resolution_list "$RES" --out_dir "$OUT_BASE/$DS" --gpu "$GPU" || true
+  python -m MERIT.scripts.make_noise_compare --dataset "$DS" --root_path "$ROOT" --resolution_list "$RES" --out_dir "$OUT_BASE/$DS" --gpu "$GPU" --repeat 5 || true
+
+  # 6.1) 案例库增强（导出高/低u Top-k，含SNR与视图冲突指标）
+  python -m MERIT.scripts.triage_enhance \
+    --dataset "$DS" \
+    --root_path "$ROOT" \
+    --resolution_list "$RES" \
+    --uncertainty_base "$OUT_BASE/$DS" \
+    --gpu "$GPU" \
+    --top_k_high 20 \
+    --top_k_low 20 || true
+
+  # 6.2) 决策曲线（临床收益 vs 拒绝率）
+  python -m MERIT.scripts.decision_curve \
+    --base_dir "$OUT_BASE/$DS" \
+    --dataset "$DS" \
+    --cost_fp 1.0 --cost_fn 2.0 --cost_review 0.2 --human_acc 0.98 \
+    --out_dir "$OUT_BASE/$DS" || true
+
+  # 6.3) 性能–延迟–显存三线图
+  python -m MERIT.scripts.perf_profile \
+    --dataset "$DS" \
+    --root_path "$ROOT" \
+    --resolution_list "$RES" \
+    --gpu "$GPU" \
+    --out_dir "$OUT_BASE/$DS/perf" \
+    --batches "16,32,64,128" || true
 
   # 7) 临床案例图（最不自信Top-6）
   python -m MERIT.scripts.plot_cases \

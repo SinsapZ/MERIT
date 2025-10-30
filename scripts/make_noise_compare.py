@@ -40,32 +40,37 @@ def build_exp(ds, root, res, use_ds, gpu, d_model=256, d_ff=512, n_heads=8, e_la
     return exp
 
 
-def compute_curve(exp, sigmas):
+def compute_curve(exp, sigmas, repeat: int = 1):
     _, tl = exp._get_data(flag='TEST')
     f1=[]; exp.model.eval()
     with torch.no_grad():
         for s in sigmas:
-            y_all=[]; p_all=[]
-            for bx, y, pm in tl:
-                bx = bx.float()
-                if s>0: bx = bx + s*torch.randn_like(bx)
-                pm = pm.float()
-                bx = bx.cuda(); pm = pm.cuda(); y = y.cuda()
-                if getattr(exp.args, 'use_ds', False):
-                    alpha,_ = exp.model(bx, pm, None, None); prob = alpha/alpha.sum(dim=1, keepdim=True)
-                else:
-                    logits,_ = exp.model(bx, pm, None, None); prob = torch.softmax(logits, dim=1)
-                pred = prob.argmax(dim=1)
-                y_all.append(y.cpu().numpy()); p_all.append(pred.cpu().numpy())
-            y_all = np.concatenate(y_all); p_all = np.concatenate(p_all)
-            f1.append(f1_score(y_all, p_all, average='macro'))
+            vals=[]
+            for _ in range(max(1, int(repeat))):
+                y_all=[]; p_all=[]
+                for bx, y, pm in tl:
+                    bx = bx.float()
+                    if s>0: bx = bx + s*torch.randn_like(bx)
+                    pm = pm.float()
+                    bx = bx.cuda(); pm = pm.cuda(); y = y.cuda()
+                    if getattr(exp.args, 'use_ds', False):
+                        alpha,_ = exp.model(bx, pm, None, None); prob = alpha/alpha.sum(dim=1, keepdim=True)
+                    else:
+                        logits,_ = exp.model(bx, pm, None, None); prob = torch.softmax(logits, dim=1)
+                    pred = prob.argmax(dim=1)
+                    y_all.append(y.cpu().numpy()); p_all.append(pred.cpu().numpy())
+                y_all = np.concatenate(y_all); p_all = np.concatenate(p_all)
+                vals.append(f1_score(y_all, p_all, average='macro'))
+            f1.append((np.mean(vals), np.std(vals)))
     # 3点移动平均
-    f1 = np.array(f1, dtype=float)
-    if f1.size >= 3:
-        s=f1.copy();
-        for i in range(1,f1.size-1): s[i]=(f1[i-1]+f1[i]+f1[i+1])/3.0
-        f1=s
-    return f1
+    f1 = np.array(f1, dtype=float)  # shape [len(sigmas), 2]
+    means = f1[:,0]
+    stds = f1[:,1]
+    if means.size >= 3:
+        sm=means.copy()
+        for i in range(1,means.size-1): sm[i]=(means[i-1]+means[i]+means[i+1])/3.0
+        means=sm
+    return means, stds
 
 
 def main():
@@ -75,6 +80,7 @@ def main():
     p.add_argument('--resolution_list', required=True)
     p.add_argument('--out_dir', required=True)
     p.add_argument('--gpu', type=int, default=0)
+    p.add_argument('--repeat', type=int, default=1)
     args = p.parse_args()
 
     sigmas = [0.0, 0.02, 0.05, 0.10, 0.20, 0.30]
@@ -83,19 +89,23 @@ def main():
     exp_e = build_exp(args.dataset, args.root_path, args.resolution_list, True,  args.gpu)
     exp_s = build_exp(args.dataset, args.root_path, args.resolution_list, False, args.gpu)
 
-    f1_e = compute_curve(exp_e, sigmas)
-    f1_s = compute_curve(exp_s, sigmas)
+    mean_e, std_e = compute_curve(exp_e, sigmas, repeat=args.repeat)
+    mean_s, std_s = compute_curve(exp_s, sigmas, repeat=args.repeat)
 
     # 单方法曲线（更“稳”的视觉）
     plt.figure(figsize=(6,4))
-    plt.plot(sigmas, f1_e, 'o-', color='#e1909c', label='EviMR-Net')
+    plt.plot(sigmas, mean_e, 'o-', color='#e1909c', label='EviMR-Net')
+    if np.any(std_e>0):
+        plt.fill_between(sigmas, mean_e-std_e, mean_e+std_e, color='#e1909c', alpha=0.15)
     plt.xlabel('Gaussian noise sigma'); plt.ylabel('F1'); plt.title(f'{args.dataset}: Noise Robustness (EviMR)')
     plt.grid(True, alpha=0.3); plt.tight_layout()
     out1=os.path.join(args.out_dir, 'noise_evi')
     plt.savefig(out1+'.png', dpi=300); plt.savefig(out1+'.svg'); plt.close()
 
     plt.figure(figsize=(6,4))
-    plt.plot(sigmas, f1_s, 'o-', color='#4a4a4a', label='Softmax')
+    plt.plot(sigmas, mean_s, 'o-', color='#4a4a4a', label='Softmax')
+    if np.any(std_s>0):
+        plt.fill_between(sigmas, mean_s-std_s, mean_s+std_s, color='#4a4a4a', alpha=0.12)
     plt.xlabel('Gaussian noise sigma'); plt.ylabel('F1'); plt.title(f'{args.dataset}: Noise Robustness (Softmax)')
     plt.grid(True, alpha=0.3); plt.tight_layout()
     out2=os.path.join(args.out_dir, 'noise_soft')
@@ -103,8 +113,12 @@ def main():
 
     # 对比图
     plt.figure(figsize=(7,4.5))
-    plt.plot(sigmas, f1_e, 'o-', color='#e1909c', label='EviMR-Net')
-    plt.plot(sigmas, f1_s, 'o--', color='#4a4a4a', label='Softmax')
+    plt.plot(sigmas, mean_e, 'o-', color='#e1909c', label='EviMR-Net')
+    plt.plot(sigmas, mean_s, 'o--', color='#4a4a4a', label='Softmax')
+    if np.any(std_e>0):
+        plt.fill_between(sigmas, mean_e-std_e, mean_e+std_e, color='#e1909c', alpha=0.15)
+    if np.any(std_s>0):
+        plt.fill_between(sigmas, mean_s-std_s, mean_s+std_s, color='#4a4a4a', alpha=0.12)
     plt.xlabel('Gaussian noise sigma'); plt.ylabel('F1'); plt.title(f'{args.dataset}: Noise Robustness (Comparison)')
     plt.grid(True, alpha=0.3); plt.legend(); plt.tight_layout()
     out3=os.path.join(args.out_dir, 'noise_compare')

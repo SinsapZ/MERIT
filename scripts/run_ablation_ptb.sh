@@ -59,7 +59,7 @@ parse_and_append() {
   local txt="$1"; local csv="$2"; local seed="$3"
   # 提取 Test results 指标
   python - <<PY "$txt" "$csv" "$seed"
-import re,sys,csv
+import re,sys,csv,os
 txt=open(sys.argv[1],'r',encoding='utf-8',errors='ignore').read()
 csv_path=sys.argv[2]
 seed=sys.argv[3]
