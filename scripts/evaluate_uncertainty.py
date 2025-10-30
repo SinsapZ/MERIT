@@ -7,7 +7,7 @@ MERIT不确定性评估 - ESWA核心实验
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import roc_auc_score, accuracy_score
+from sklearn.metrics import roc_auc_score, accuracy_score, roc_curve, precision_recall_curve, auc
 import argparse
 import os
 
@@ -150,6 +150,40 @@ def main():
     plt.savefig(out_svg)
     plt.close()
     
+    # 5) 错误检测 ROC/PR（使用 u 作为“错误分数”）
+    y_err = (predictions != labels).astype(int)
+    fpr, tpr, _ = roc_curve(y_err, uncertainties)
+    roc_auc = auc(fpr, tpr)
+    prec, rec, _ = precision_recall_curve(y_err, uncertainties)
+    pr_auc = auc(rec, prec)
+
+    # ROC
+    plt.figure(figsize=(6.4, 5.6))
+    plt.plot(fpr, tpr, color=colors[3], linewidth=2, label=f'AUC = {roc_auc:.3f}')
+    plt.plot([0,1],[0,1], linestyle='--', color=colors[4], alpha=0.6)
+    plt.xlabel('FPR'); plt.ylabel('TPR'); plt.title('Error Detection ROC'); plt.legend(); plt.grid(True, alpha=0.3)
+    out_png = os.path.join(args.output_dir, f'{args.dataset_name}_error_roc.png')
+    out_svg = os.path.join(args.output_dir, f'{args.dataset_name}_error_roc.svg')
+    plt.savefig(out_png, dpi=300); plt.savefig(out_svg); plt.close()
+
+    # PR
+    plt.figure(figsize=(6.4, 5.6))
+    plt.plot(rec, prec, color=colors[1], linewidth=2, label=f'AUPRC = {pr_auc:.3f}')
+    plt.xlabel('Recall'); plt.ylabel('Precision'); plt.title('Error Detection PR'); plt.legend(); plt.grid(True, alpha=0.3)
+    out_png = os.path.join(args.output_dir, f'{args.dataset_name}_error_pr.png')
+    out_svg = os.path.join(args.output_dir, f'{args.dataset_name}_error_pr.svg')
+    plt.savefig(out_png, dpi=300); plt.savefig(out_svg); plt.close()
+
+    # 6) 置信度–不确定度散点（标注误判）
+    plt.figure(figsize=(6.8, 5.6))
+    mask_err = y_err.astype(bool)
+    plt.scatter(confidences[~mask_err], uncertainties[~mask_err], s=14, alpha=0.35, color=colors[0], label='Correct')
+    plt.scatter(confidences[mask_err], uncertainties[mask_err], s=18, alpha=0.65, color=colors[3], label='Misclassified')
+    plt.xlabel('Confidence'); plt.ylabel('Uncertainty (u)'); plt.title('Confidence vs Uncertainty'); plt.legend(); plt.grid(True, alpha=0.25)
+    out_png = os.path.join(args.output_dir, f'{args.dataset_name}_conf_vs_u.png')
+    out_svg = os.path.join(args.output_dir, f'{args.dataset_name}_conf_vs_u.svg')
+    plt.savefig(out_png, dpi=300); plt.savefig(out_svg); plt.close()
+
     print(f"\n✅ 结果已保存到: {args.output_dir}")
     
     # 保存LaTeX表格
@@ -187,9 +221,15 @@ def main():
     order = np.argsort(confidences)  # 从低到高，最不自信优先
     with open(cand_path, 'w', newline='') as f:
         w = csv.writer(f)
-        w.writerow(['index','label','prediction','uncertainty(approx)','confidence'])
+        # 同时写入精确的不确定度 u（来自 uncertainties.npy）与近似 1-conf
+        w.writerow(['index','label','prediction','uncertainty','uncertainty(approx)','confidence'])
         for i in order[: max(1, int(len(confidences)*rr/100.0)) ]:
-            w.writerow([int(i), int(labels[i]), int(predictions[i]), float(1.0 - confidences[i]), float(confidences[i])])
+            w.writerow([
+                int(i), int(labels[i]), int(predictions[i]),
+                float(uncertainties[i]),                     # 精确 u
+                float(1.0 - confidences[i]),                 # 近似 u
+                float(confidences[i])
+            ])
     print(f"Triage summary: {summary}")
     print(f"Triage candidates: {cand_path}")
 

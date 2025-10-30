@@ -99,10 +99,7 @@ run_one_dataset() {
   python -m MERIT.scripts.compare_selective --base_dir "$OUT_BASE/$DS" --dataset "$DS" --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' || true
   python -m MERIT.scripts.make_uncert_density --base_dir "$OUT_BASE/$DS" --dataset "$DS" || true
 
-  # --- 5) 噪声鲁棒性（EviMR与Softmax + 对比） ---
-  python -m MERIT.scripts.make_noise_compare --dataset "$DS" --root_path "$ROOT" --resolution_list "$RES" --out_dir "$OUT_BASE/$DS" --gpu "$GPU" --repeat 5 || true
-
-  # --- 5.1) 案例库增强（导出高/低u Top-k，含SNR与视图冲突指标） ---
+  # --- 5) 案例库增强（导出高/低u Top-k，含SNR与视图冲突指标） ---
   python -m MERIT.scripts.triage_enhance \
     --dataset "$DS" \
     --root_path "$ROOT" \
@@ -112,14 +109,14 @@ run_one_dataset() {
     --top_k_high 20 \
     --top_k_low 20 || true
 
-  # --- 5.2) 决策曲线（临床收益 vs 拒绝率） ---
+  # --- 5.1) 决策曲线（临床收益 vs 拒绝率） ---
   python -m MERIT.scripts.decision_curve \
     --base_dir "$OUT_BASE/$DS" \
     --dataset "$DS" \
     --cost_fp 1.0 --cost_fn 2.0 --cost_review 0.2 --human_acc 0.98 \
     --out_dir "$OUT_BASE/$DS" || true
 
-  # --- 5.3) 性能–延迟–显存三线图 ---
+  # --- 5.2) 性能–延迟–显存三线图 ---
   python -m MERIT.scripts.perf_profile \
     --dataset "$DS" \
     --root_path "$ROOT" \
@@ -136,6 +133,24 @@ run_one_dataset() {
     --uncertainty_base "$OUT_BASE/$DS" \
     --top_k_high 6 \
     --top_k_low 6 \
+    --gpu "$GPU" || true
+
+  # --- 7) 高区分度样本（按真实类 Top-K 最大 margin） ---
+  python -m MERIT.scripts.select_margin_cases \
+    --dataset "$DS" \
+    --root_path "$ROOT" \
+    --resolution_list "$RES" \
+    --uncertainty_base "$OUT_BASE/$DS" \
+    --gpu "$GPU" \
+    --top_k_per_class 3 \
+    --correct_only || true
+  python -m MERIT.scripts.plot_cases \
+    --dataset "$DS" \
+    --root_path "$ROOT" \
+    --resolution_list "$RES" \
+    --uncertainty_base "$OUT_BASE/$DS" \
+    --index_csv "$OUT_BASE/$DS/cases/triage_margin.csv" \
+    --num_from_csv 12 \
     --gpu "$GPU" || true
 }
 

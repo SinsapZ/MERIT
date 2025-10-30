@@ -28,7 +28,7 @@ PALETTE = {
 }
 
 
-def load_triage(plots_evi_dir: str, top_k: int):
+def load_triage_sorted(plots_evi_dir: str):
     triage_csv = os.path.join(plots_evi_dir, 'triage_candidates.csv')
     if not os.path.exists(triage_csv):
         raise FileNotFoundError(f'Not found: {triage_csv}')
@@ -41,11 +41,13 @@ def load_triage(plots_evi_dir: str, top_k: int):
                 'index': int(row['index']),
                 'label': int(row['label']),
                 'prediction': int(row['prediction']),
-                'uncertainty': float(row.get('uncertainty(approx)', row.get('uncertainty', 0.0))),
+                # 优先使用精确 u；若缺失则回退到 approx
+                'uncertainty': float(row.get('uncertainty', row.get('uncertainty(approx)', 0.0))),
                 'confidence': float(row['confidence']),
             })
-    rows = sorted(rows, key=lambda x: x['confidence'])  # 最不自信在前
-    return rows[:top_k]
+    # 置信度从低到高排序：最不自信在前（高 u 在前）
+    rows = sorted(rows, key=lambda x: x['confidence'])
+    return rows
 
 
 def build_exp(ds, root, res, e_layers, d_model, d_ff, n_heads, batch_size, lr, gpu, seed, use_ds=True):
@@ -78,42 +80,59 @@ def build_exp(ds, root, res, e_layers, d_model, d_ff, n_heads, batch_size, lr, g
 
 def plot_cases(ds, root, res, out_base, plots_evi_dir,
                top_k_high=6, top_k_low=6,
+               index_csv: str = '', num_from_csv: int = 0,
                gpu=0, e_layers=4, d_model=256, d_ff=512, n_heads=8, batch_size=64, lr=1e-4, seed=41):
     os.makedirs(out_base, exist_ok=True)
     exp = build_exp(ds, root, res, e_layers, d_model, d_ff, n_heads, batch_size, lr, gpu, seed, use_ds=True)
     test_data, test_loader = exp._get_data(flag='TEST')
     exp.model.eval()
 
-    # 全量计算 u/conf/pred
-    all_u=[]; all_conf=[]; all_pred=[]
-    with torch.no_grad():
-        for bx, y, pm in test_loader:
-            bx=bx.float().to(exp.device); pm=pm.float().to(exp.device)
-            alpha,_=exp.model(bx, pm, None, None)
-            S=alpha.sum(dim=1, keepdim=True); prob=alpha/S
-            K=prob.shape[1]; u=(K/S).squeeze(1); conf=prob.max(dim=1).values; pred=prob.argmax(dim=1)
-            all_u.append(u.cpu()); all_conf.append(conf.cpu()); all_pred.append(pred.cpu())
-    all_u=torch.cat(all_u,dim=0).numpy(); all_conf=torch.cat(all_conf,dim=0).numpy(); all_pred=torch.cat(all_pred,dim=0).numpy()
+    # 样本来源：优先使用自定义 CSV（例如 triage_margin.csv）；否则用 triage_candidates.csv
+    csv_rows = []
+    if index_csv and os.path.exists(index_csv):
+        with open(index_csv, 'r') as f:
+            r = csv.DictReader(f)
+            for row in r:
+                csv_rows.append({
+                    'index': int(row['index']),
+                    'label': int(row.get('label', -1)),
+                    'prediction': int(row.get('prediction', -1)),
+                    'uncertainty': float(row.get('uncertainty', row.get('uncertainty(approx)', 0.0))),
+                    'confidence': float(row.get('confidence', row.get('p1', 0.0))),
+                    'margin': float(row.get('margin', 0.0)),
+                })
+        if num_from_csv and num_from_csv > 0:
+            csv_rows = csv_rows[:num_from_csv]
+        hi_rows = csv_rows
+        lo_rows = []
+    else:
+        triage_rows = load_triage_sorted(plots_evi_dir)
+        hi_rows = triage_rows[:top_k_high]  # 高不确定度（低置信度）
+        lo_rows = list(reversed(triage_rows[-top_k_low:]))  # 低不确定度（高置信度）
 
-    idx_all=np.arange(len(all_u))
-    hi_idx=idx_all[np.argsort(all_u)[-top_k_high:]][::-1]
-    lo_idx=idx_all[np.argsort(all_u)[:top_k_low]]
-
-    def render_case(idx, tag):
+    def render_case(idx, tag, u_csv: float, conf_csv: float, margin: float = None):
         x=test_data.X[idx]; label=int(test_data.y[idx])
         with torch.no_grad():
             bx=torch.from_numpy(x).float().unsqueeze(0).to(exp.device); pm=torch.zeros((1,x.shape[0])).float().to(exp.device)
-            alpha,_=exp.model(bx,pm,None,None); S=alpha.sum(dim=1,keepdim=True); prob=(alpha/S).squeeze(0).cpu().numpy(); pred=int(prob.argmax()); K=prob.shape[0]; u=float((K/S).item()); conf=float(prob.max())
+            alpha,_=exp.model(bx,pm,None,None); S=alpha.sum(dim=1,keepdim=True); prob=(alpha/S).squeeze(0).cpu().numpy(); pred=int(prob.argmax()); K=prob.shape[0]; u_model=float((K/S).item()); conf_model=float(prob.max())
         out_dir=os.path.join(out_base,'cases'); os.makedirs(out_dir,exist_ok=True)
         plt.figure(figsize=(8,2)); plt.plot(x[:,0], color=PALETTE['gray'])
-        plt.title(f'Waveform (ch=0)  label={label}  pred={pred}  conf={conf:.3f}  u={u:.6f}')
+        title = f'Waveform (ch=0)  label={label}  pred={pred}  conf={conf_csv:.3f}  u={u_csv:.6f}'
+        if margin is not None:
+            title += f'  margin={margin:.3f}'
+        plt.title(title)
         plt.tight_layout(); base=os.path.join(out_dir,f'clinical_{tag}_wave'); plt.savefig(base+'.png',dpi=300); plt.savefig(base+'.svg'); plt.close()
         colors=[PALETTE['vanilla']]*K; colors[pred]=PALETTE['puce']
         plt.figure(figsize=(4.2,3.4)); plt.bar(np.arange(K), prob, color=colors); plt.ylim(0,1.0)
-        plt.title(f'Prob (pred={pred}, u={u:.6f})'); plt.tight_layout(); base=os.path.join(out_dir,f'clinical_{tag}_prob'); plt.savefig(base+'.png',dpi=300); plt.savefig(base+'.svg'); plt.close()
+        prob_title = f'Prob (pred={pred}, u={u_csv:.6f})'
+        if margin is not None:
+            prob_title += f'  margin={margin:.3f}'
+        plt.title(prob_title); plt.tight_layout(); base=os.path.join(out_dir,f'clinical_{tag}_prob'); plt.savefig(base+'.png',dpi=300); plt.savefig(base+'.svg'); plt.close()
 
-    for r,i in enumerate(hi_idx): render_case(int(i), f'hi_u_{r}')
-    for r,i in enumerate(lo_idx): render_case(int(i), f'lo_u_{r}')
+    for r,row in enumerate(hi_rows):
+        render_case(int(row['index']), f'hi_u_{r}', float(row.get('uncertainty', 0.0)), float(row.get('confidence', 0.0)), float(row.get('margin', 0.0)))
+    for r,row in enumerate(lo_rows):
+        render_case(int(row['index']), f'lo_u_{r}', float(row.get('uncertainty', 0.0)), float(row.get('confidence', 0.0)), float(row.get('margin', 0.0)))
 
     print(f'Saved clinical cases (high/low u) to: {out_base}/cases')
 
