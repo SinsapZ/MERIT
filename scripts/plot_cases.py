@@ -87,6 +87,20 @@ def plot_cases(ds, root, res, out_base, plots_evi_dir,
     test_data, test_loader = exp._get_data(flag='TEST')
     exp.model.eval()
 
+    # 先用与评估一致的 DataLoader 计算全量 per-sample 概率，避免单样本推理造成的 padding mask 偏差
+    prob_map = {}
+    with torch.no_grad():
+        offset = 0
+        for bx, y, pm in test_loader:
+            bx = bx.float().to(exp.device); pm = pm.float().to(exp.device)
+            alpha,_ = exp.model(bx, pm, None, None)
+            S = alpha.sum(dim=1, keepdim=True)
+            prob = (alpha / S).cpu().numpy()  # [B,K]
+            bsz = prob.shape[0]
+            for i in range(bsz):
+                prob_map[offset + i] = prob[i]
+            offset += bsz
+
     # 样本来源：优先使用自定义 CSV（例如 triage_margin.csv）；否则用 triage_candidates.csv
     csv_rows = []
     if index_csv and os.path.exists(index_csv):
@@ -112,20 +126,21 @@ def plot_cases(ds, root, res, out_base, plots_evi_dir,
 
     def render_case(idx, tag, u_csv: float, conf_csv: float, margin: float = None):
         x=test_data.X[idx]; label=int(test_data.y[idx])
-        with torch.no_grad():
-            bx=torch.from_numpy(x).float().unsqueeze(0).to(exp.device); pm=torch.zeros((1,x.shape[0])).float().to(exp.device)
-            alpha,_=exp.model(bx,pm,None,None); S=alpha.sum(dim=1,keepdim=True); prob=(alpha/S).squeeze(0).cpu().numpy(); pred=int(prob.argmax()); K=prob.shape[0]; u_model=float((K/S).item()); conf_model=float(prob.max())
+        prob = prob_map.get(int(idx))
+        if prob is None:
+            return
+        pred=int(np.argmax(prob)); K=prob.shape[0]
         out_dir=os.path.join(out_base,'cases'); os.makedirs(out_dir,exist_ok=True)
         plt.figure(figsize=(8,2)); plt.plot(x[:,0], color=PALETTE['gray'])
         title = f'Waveform (ch=0)  label={label}  pred={pred}  conf={conf_csv:.3f}  u={u_csv:.6f}'
-        if margin is not None:
+        if margin is not None and np.isfinite(margin) and margin>0:
             title += f'  margin={margin:.3f}'
         plt.title(title)
         plt.tight_layout(); base=os.path.join(out_dir,f'clinical_{tag}_wave'); plt.savefig(base+'.png',dpi=300); plt.savefig(base+'.svg'); plt.close()
         colors=[PALETTE['vanilla']]*K; colors[pred]=PALETTE['puce']
         plt.figure(figsize=(4.2,3.4)); plt.bar(np.arange(K), prob, color=colors); plt.ylim(0,1.0)
         prob_title = f'Prob (pred={pred}, u={u_csv:.6f})'
-        if margin is not None:
+        if margin is not None and np.isfinite(margin) and margin>0:
             prob_title += f'  margin={margin:.3f}'
         plt.title(prob_title); plt.tight_layout(); base=os.path.join(out_dir,f'clinical_{tag}_prob'); plt.savefig(base+'.png',dpi=300); plt.savefig(base+'.svg'); plt.close()
 
