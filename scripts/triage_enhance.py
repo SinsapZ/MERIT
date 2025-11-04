@@ -117,7 +117,9 @@ def main():
 
     exp = build_exp(args.dataset, args.root_path, args.resolution_list, args.gpu)
     test_data, test_loader = exp._get_data(flag='TEST')
-    exp.model.eval()
+    infer_model = exp.swa_model if getattr(exp, 'swa', False) else exp.model
+    infer_model.to(exp.device)
+    infer_model.eval()
 
     # 为了方便索引，构建 index->(snr, conflict_std, disagree)
     snr_map = {}
@@ -132,7 +134,7 @@ def main():
                 snr_map[offset+i] = estimate_snr(x)
             bx = bx.float().to(exp.device)
             pm = pm.float().to(exp.device)
-            fused_alpha, alpha_list = exp.model(bx, pm, None, None)
+            fused_alpha, alpha_list = infer_model(bx, pm, None, None)
             S = fused_alpha.sum(dim=1, keepdim=True)
             fused_prob = fused_alpha / S
             stdp, disag = view_conflict_metrics(alpha_list, fused_prob)

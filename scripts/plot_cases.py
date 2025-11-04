@@ -85,7 +85,9 @@ def plot_cases(ds, root, res, out_base, plots_evi_dir,
     os.makedirs(out_base, exist_ok=True)
     exp = build_exp(ds, root, res, e_layers, d_model, d_ff, n_heads, batch_size, lr, gpu, seed, use_ds=True)
     test_data, test_loader = exp._get_data(flag='TEST')
-    exp.model.eval()
+    infer_model = exp.swa_model if getattr(exp, 'swa', False) else exp.model
+    infer_model.to(exp.device)
+    infer_model.eval()
 
     # 先用与评估一致的 DataLoader 计算全量 per-sample 概率，避免单样本推理造成的 padding mask 偏差
     prob_map = {}
@@ -93,7 +95,7 @@ def plot_cases(ds, root, res, out_base, plots_evi_dir,
         offset = 0
         for bx, y, pm in test_loader:
             bx = bx.float().to(exp.device); pm = pm.float().to(exp.device)
-            alpha,_ = exp.model(bx, pm, None, None)
+            alpha,_ = infer_model(bx, pm, None, None)
             S = alpha.sum(dim=1, keepdim=True)
             prob = (alpha / S).cpu().numpy()  # [B,K]
             bsz = prob.shape[0]

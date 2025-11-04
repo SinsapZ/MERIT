@@ -45,7 +45,9 @@ def main():
 
     exp = build_exp(args.dataset, args.root_path, args.resolution_list, args.gpu)
     test_data, test_loader = exp._get_data(flag='TEST')
-    exp.model.eval()
+    infer_model = exp.swa_model if getattr(exp, 'swa', False) else exp.model
+    infer_model.to(exp.device)
+    infer_model.eval()
 
     records = []
     with torch.no_grad():
@@ -53,7 +55,7 @@ def main():
         for bx, label, pm in test_loader:
             bx = bx.float().to(exp.device)
             pm = pm.float().to(exp.device)
-            fused_alpha, _ = exp.model(bx, pm, None, None)
+            fused_alpha, _ = infer_model(bx, pm, None, None)
             S = fused_alpha.sum(dim=1, keepdim=True)
             prob = fused_alpha / S
             K = prob.shape[1]
