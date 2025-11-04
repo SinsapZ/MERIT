@@ -11,6 +11,10 @@ declare -A ROOTS
 declare -A LRS
 declare -A LAMBDA_PSEUDO_LOSS
 declare -A RES_LIST
+declare -A WD_MAP
+declare -A ANNEAL_MAP
+declare -A EPOCHS_MAP
+declare -A PATIENCE_MAP
 
 ROOTS[APAVA]="/home/Data1/zbl/dataset/APAVA"
 LRS[APAVA]="1e-4"
@@ -26,15 +30,28 @@ ROOTS["PTB-XL"]="/home/Data1/zbl/dataset/PTB-XL"
 LRS["PTB-XL"]="1.5e-4"
 LAMBDA_PSEUDO_LOSS["PTB-XL"]="0.3"
 RES_LIST["PTB-XL"]="2,4,6,8"
+WD_MAP["PTB-XL"]="0"
+ANNEAL_MAP["PTB-XL"]="40"
+EPOCHS_MAP["PTB-XL"]="120"
+PATIENCE_MAP["PTB-XL"]="18"
+
+WD_MAP[APAVA]="0"
+WD_MAP[PTB]="0"
+ANNEAL_MAP[APAVA]="40"
+ANNEAL_MAP[PTB]="40"
+EPOCHS_MAP[APAVA]="120"
+EPOCHS_MAP[PTB]="120"
+PATIENCE_MAP[APAVA]="18"
+PATIENCE_MAP[PTB]="18"
 
 # 通用训练超参
 E_LAYERS=4
 DROPOUT=0.1
 BATCH_SIZE=64
-EPOCHS=150
-PATIENCE=20
-WD=1e-4
-ANNEAL=50
+DEFAULT_EPOCHS=150
+DEFAULT_PATIENCE=20
+DEFAULT_WD=1e-4
+DEFAULT_ANNEAL=50
 D_MODEL=256
 D_FF=512
 N_HEADS=8
@@ -51,6 +68,10 @@ run_one_dataset() {
   local LR=${LRS[$DS]}
   local LPL=${LAMBDA_PSEUDO_LOSS[$DS]}
   local RES=${RES_LIST[$DS]}
+  local WD_VAL=${WD_MAP[$DS]:-$DEFAULT_WD}
+  local ANNEAL_VAL=${ANNEAL_MAP[$DS]:-$DEFAULT_ANNEAL}
+  local EPOCHS_VAL=${EPOCHS_MAP[$DS]:-$DEFAULT_EPOCHS}
+  local PATIENCE_VAL=${PATIENCE_MAP[$DS]:-$DEFAULT_PATIENCE}
 
   echo "\n=============================="
   echo "运行数据集: $DS"
@@ -65,10 +86,10 @@ run_one_dataset() {
     --use_ds \
     --learning_rate "$LR" \
     --lambda_fuse 1.0 --lambda_view 1.0 --lambda_pseudo_loss "$LPL" \
-    --annealing_epoch "$ANNEAL" \
+    --annealing_epoch "$ANNEAL_VAL" \
     --resolution_list "$RES" \
-    --batch_size "$BATCH_SIZE" --train_epochs "$EPOCHS" --patience "$PATIENCE" \
-    --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD" \
+    --batch_size "$BATCH_SIZE" --train_epochs "$EPOCHS_VAL" --patience "$PATIENCE_VAL" \
+    --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD_VAL" \
     --d_model "$D_MODEL" --d_ff "$D_FF" --n_heads "$N_HEADS" \
     --nodedim "$NODEDIM" --gpu "$GPU" --swa \
     --seed "$SEED" \
@@ -83,8 +104,8 @@ run_one_dataset() {
     --model_id "UNCERT-${DS}-SOFT" \
     --learning_rate "$LR" \
     --resolution_list "$RES" \
-    --batch_size "$BATCH_SIZE" --train_epochs "$EPOCHS" --patience "$PATIENCE" \
-    --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD" \
+    --batch_size "$BATCH_SIZE" --train_epochs "$EPOCHS_VAL" --patience "$PATIENCE_VAL" \
+    --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD_VAL" \
     --d_model "$D_MODEL" --d_ff "$D_FF" --n_heads "$N_HEADS" \
     --nodedim "$NODEDIM" --gpu "$GPU" --swa \
     --seed "$SEED" \

@@ -12,12 +12,20 @@ declare -A ROOTS
 declare -A LRS
 declare -A RES_LIST
 declare -A LAMBDA_PSEUDO_LOSS
+declare -A WD_MAP
+declare -A ANNEAL_MAP
+declare -A EPOCHS_MAP
+declare -A PATIENCE_MAP
 
 ROOTS[APAVA]="/home/Data1/zbl/dataset/APAVA";     LRS[APAVA]="1e-4";    RES_LIST[APAVA]="2,4,6,8";   LAMBDA_PSEUDO_LOSS[APAVA]="0.3"
 ROOTS[PTB]="/home/Data1/zbl/dataset/PTB";         LRS[PTB]="1.5e-4";   RES_LIST[PTB]="2,4,6,8";     LAMBDA_PSEUDO_LOSS[PTB]="0.2"
 ROOTS["PTB-XL"]="/home/Data1/zbl/dataset/PTB-XL"; LRS["PTB-XL"]="1.5e-4"; RES_LIST["PTB-XL"]="2,4,6,8"; LAMBDA_PSEUDO_LOSS["PTB-XL"]="0.3"
+WD_MAP[APAVA]="1e-4"; WD_MAP[PTB]="0"; WD_MAP["PTB-XL"]="0"
+ANNEAL_MAP[APAVA]="50"; ANNEAL_MAP[PTB]="40"; ANNEAL_MAP["PTB-XL"]="40"
+EPOCHS_MAP[APAVA]="150"; EPOCHS_MAP[PTB]="120"; EPOCHS_MAP["PTB-XL"]="120"
+PATIENCE_MAP[APAVA]="20"; PATIENCE_MAP[PTB]="18"; PATIENCE_MAP["PTB-XL"]="18"
 
-E_LAYERS=4; D_MODEL=256; D_FF=512; N_HEADS=8; DROPOUT=0.1; WD=1e-4; BATCH=64; EPOCHS=150; PATIENCE=20; ANNEAL=50; NODEDIM=10; SEED=41
+E_LAYERS=4; D_MODEL=256; D_FF=512; N_HEADS=8; DROPOUT=0.1; WD_DEFAULT=1e-4; BATCH=64; EPOCHS_DEFAULT=150; PATIENCE_DEFAULT=20; ANNEAL_DEFAULT=50; NODEDIM=10; SEED=41
 
 OUT_BASE="results/uncertainty"; mkdir -p "$OUT_BASE"
 
@@ -27,6 +35,10 @@ run_eval_dataset() {
   local LR=${LRS[$DS]}
   local RES=${RES_LIST[$DS]}
   local LPL=${LAMBDA_PSEUDO_LOSS[$DS]}
+  local WD_VAL=${WD_MAP[$DS]:-$WD_DEFAULT}
+  local ANNEAL_VAL=${ANNEAL_MAP[$DS]:-$ANNEAL_DEFAULT}
+  local EPOCHS_VAL=${EPOCHS_MAP[$DS]:-$EPOCHS_DEFAULT}
+  local PATIENCE_VAL=${PATIENCE_MAP[$DS]:-$PATIENCE_DEFAULT}
   echo "\n================ EVAL ONLY: $DS ================"
 
   local EVI_DIR="$OUT_BASE/$DS/evi";     mkdir -p "$EVI_DIR"
@@ -43,10 +55,10 @@ run_eval_dataset() {
     --use_ds \
     --learning_rate "$LR" \
     --lambda_fuse 1.0 --lambda_view 1.0 --lambda_pseudo_loss "$LPL" \
-    --annealing_epoch "$ANNEAL" \
+    --annealing_epoch "$ANNEAL_VAL" \
     --resolution_list "$RES" \
-    --batch_size "$BATCH" --train_epochs "$EPOCHS" --patience "$PATIENCE" \
-    --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD" \
+    --batch_size "$BATCH" --train_epochs "$EPOCHS_VAL" --patience "$PATIENCE_VAL" \
+    --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD_VAL" \
     --d_model "$D_MODEL" --d_ff "$D_FF" --n_heads "$N_HEADS" \
     --nodedim "$NODEDIM" --gpu "$GPU" --swa \
     --seed "$SEED" \
@@ -62,8 +74,8 @@ run_eval_dataset() {
     --root_path "$ROOT" \
     --learning_rate "$LR" \
     --resolution_list "$RES" \
-    --batch_size "$BATCH" --train_epochs "$EPOCHS" --patience "$PATIENCE" \
-    --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD" \
+    --batch_size "$BATCH" --train_epochs "$EPOCHS_VAL" --patience "$PATIENCE_VAL" \
+    --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD_VAL" \
     --d_model "$D_MODEL" --d_ff "$D_FF" --n_heads "$N_HEADS" \
     --nodedim "$NODEDIM" --gpu "$GPU" --swa \
     --seed "$SEED" \

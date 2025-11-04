@@ -103,10 +103,10 @@ python MERIT/scripts/summarize_all_datasets.py
 
 | Dataset | lr | epochs | 其他关键参数 |
 |---------|-----|--------|--------------|
-| APAVA | 1.1e-4 | 200 | lambda=(1.0,1.0,0.3) |
+| APAVA | 1e-4 | 150 | λ=(λ_fuse=1.0, λ_view=1.0, λ_pseudo_loss=0.3), anneal=50 |
 | ADFD | 1e-4 | 150 | e_layers=6, dropout=0.2 |
-| PTB | 1e-4 | 150 | - |
-| PTB-XL | 2e-4 | 100 | - |
+| PTB | 1.5e-4 | 120 | wd=0, λ_pseudo_loss=0.2, anneal=40 |
+| PTB-XL | 1.5e-4 | 120 | wd=0, λ_pseudo=0.3, anneal=40 |
 
 **注**: 配置已在脚本中设置好
 
