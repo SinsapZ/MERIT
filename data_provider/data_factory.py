@@ -21,7 +21,9 @@ data_dict = {
 
 def data_provider(args, flag):
     Data = data_dict[args.data]
-    if flag == "test":
+    _flag = str(flag).lower()
+    # 禁用 VAL/TEST 集的打乱，确保与保存的不确定性数组索引严格对齐
+    if _flag in ("test", "val"):
         shuffle_flag = False
         drop_last = True
         batch_size = args.batch_size
