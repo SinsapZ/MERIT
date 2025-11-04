@@ -237,6 +237,8 @@ def main():
     ap.add_argument('--batch_size', type=int, default=64)
     ap.add_argument('--lr', type=float, default=1e-4)
     ap.add_argument('--seed', type=int, default=41)
+    ap.add_argument('--index_csv', type=str, default='')
+    ap.add_argument('--num_from_csv', type=int, default=0)
     args = ap.parse_args()
 
     plots_evi_dir = os.path.join(args.uncertainty_base, 'plots_evi')
@@ -246,7 +248,8 @@ def main():
                top_k_high=args.top_k_high, top_k_low=args.top_k_low,
                gpu=args.gpu, e_layers=args.e_layers,
                d_model=args.d_model, d_ff=args.d_ff, n_heads=args.n_heads,
-               batch_size=args.batch_size, lr=args.lr, seed=args.seed)
+               batch_size=args.batch_size, lr=args.lr, seed=args.seed,
+               index_csv=args.index_csv, num_from_csv=args.num_from_csv)
 
 
 if __name__ == '__main__':
