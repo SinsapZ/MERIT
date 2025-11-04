@@ -28,26 +28,73 @@ PALETTE = {
 }
 
 
-def load_triage_sorted(plots_evi_dir: str):
-    triage_csv = os.path.join(plots_evi_dir, 'triage_candidates.csv')
-    if not os.path.exists(triage_csv):
-        raise FileNotFoundError(f'Not found: {triage_csv}')
-    rows = []
-    with open(triage_csv, 'r') as f:
-        r = csv.DictReader(f)
-        for row in r:
-            # index,label,prediction,uncertainty(approx),confidence
-            rows.append({
-                'index': int(row['index']),
-                'label': int(row['label']),
-                'prediction': int(row['prediction']),
-                # 优先使用精确 u；若缺失则回退到 approx
-                'uncertainty': float(row.get('uncertainty', row.get('uncertainty(approx)', 0.0))),
-                'confidence': float(row['confidence']),
-            })
-    # 置信度从低到高排序：最不自信在前（高 u 在前）
-    rows = sorted(rows, key=lambda x: x['confidence'])
-    return rows
+def load_evi_scores(base_dir: str):
+    evi_dir = os.path.join(base_dir, 'evi')
+    paths = {
+        'uncertainty': os.path.join(evi_dir, 'uncertainties.npy'),
+        'confidence': os.path.join(evi_dir, 'confidences.npy'),
+        'prediction': os.path.join(evi_dir, 'predictions.npy'),
+        'label': os.path.join(evi_dir, 'labels.npy'),
+    }
+    for _, pth in paths.items():
+        if not os.path.exists(pth):
+            return None
+    return {k: np.load(v) for k, v in paths.items()}
+
+
+def load_case_candidates(base_dir: str, top_k_high: int, top_k_low: int):
+    enhanced_csv = os.path.join(base_dir, 'cases', 'triage_enhanced.csv')
+    hi_rows, lo_rows = [], []
+    if os.path.exists(enhanced_csv):
+        with open(enhanced_csv, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                bucket = row.get('rank_type', '')
+                record = {
+                    'index': int(row['index']),
+                    'label': int(row['label']),
+                    'prediction': int(row['prediction']),
+                    'uncertainty': float(row['uncertainty']),
+                    'confidence': float(row['confidence']),
+                }
+                if bucket == 'high_u' and len(hi_rows) < top_k_high:
+                    hi_rows.append(record)
+                elif bucket == 'low_u' and len(lo_rows) < top_k_low:
+                    lo_rows.append(record)
+            # 若增强CSV不够，回退到原始分数
+            if len(hi_rows) >= top_k_high and len(lo_rows) >= top_k_low:
+                return hi_rows, lo_rows
+
+    scores = load_evi_scores(base_dir)
+    if scores is None:
+        return hi_rows, lo_rows
+
+    u = scores['uncertainty']; conf = scores['confidence']
+    label = scores['label']; pred = scores['prediction']
+    n = len(u)
+    if n == 0:
+        return hi_rows, lo_rows
+
+    order_hi = np.argsort(u)[-min(top_k_high, n):][::-1]
+    order_lo = np.argsort(u)[:min(top_k_low, n)]
+
+    for idx in order_hi:
+        hi_rows.append({
+            'index': int(idx),
+            'label': int(label[idx]),
+            'prediction': int(pred[idx]),
+            'uncertainty': float(u[idx]),
+            'confidence': float(conf[idx]),
+        })
+    for idx in order_lo:
+        lo_rows.append({
+            'index': int(idx),
+            'label': int(label[idx]),
+            'prediction': int(pred[idx]),
+            'uncertainty': float(u[idx]),
+            'confidence': float(conf[idx]),
+        })
+    return hi_rows, lo_rows
 
 
 def build_exp(ds, root, res, e_layers, d_model, d_ff, n_heads, batch_size, lr, gpu, seed, use_ds=True):
@@ -104,8 +151,8 @@ def plot_cases(ds, root, res, out_base, plots_evi_dir,
             offset += bsz
 
     # 样本来源：优先使用自定义 CSV（例如 triage_margin.csv）；否则用 triage_candidates.csv
-    csv_rows = []
     if index_csv and os.path.exists(index_csv):
+        csv_rows = []
         with open(index_csv, 'r') as f:
             r = csv.DictReader(f)
             for row in r:
@@ -122,34 +169,54 @@ def plot_cases(ds, root, res, out_base, plots_evi_dir,
         hi_rows = csv_rows
         lo_rows = []
     else:
-        triage_rows = load_triage_sorted(plots_evi_dir)
-        hi_rows = triage_rows[:top_k_high]  # 高不确定度（低置信度）
-        lo_rows = list(reversed(triage_rows[-top_k_low:]))  # 低不确定度（高置信度）
+        hi_rows, lo_rows = load_case_candidates(out_base, top_k_high, top_k_low)
 
-    def render_case(idx, tag, u_csv: float, conf_csv: float, margin: float = None):
-        x=test_data.X[idx]; label=int(test_data.y[idx])
+    def render_case(idx, tag, u_csv: float, label_hint: int = None,
+                    pred_hint: int = None, conf_hint: float = None, margin: float = None):
+        x = test_data.X[idx]
+        label = int(label_hint) if label_hint is not None and label_hint >= 0 else int(test_data.y[idx])
         prob = prob_map.get(int(idx))
         if prob is None:
             return
-        pred=int(np.argmax(prob)); K=prob.shape[0]
+        K = prob.shape[0]
+        pred = int(pred_hint) if pred_hint is not None and pred_hint >= 0 else int(np.argmax(prob))
+        conf_val = float(prob[pred]) if 0 <= pred < K else float(prob.max())
+        if conf_hint is not None and np.isfinite(conf_hint):
+            conf_val = float(conf_hint)
+        if margin is None or not np.isfinite(margin):
+            if K > 1:
+                sortp = np.sort(prob)
+                margin = float(sortp[-1] - sortp[-2])
+            else:
+                margin = float(prob[0])
         out_dir=os.path.join(out_base,'cases'); os.makedirs(out_dir,exist_ok=True)
         plt.figure(figsize=(8,2)); plt.plot(x[:,0], color=PALETTE['gray'])
-        title = f'Waveform (ch=0)  label={label}  pred={pred}  conf={conf_csv:.3f}  u={u_csv:.6f}'
-        if margin is not None and np.isfinite(margin) and margin>0:
+        title = f'Waveform (ch=0)  label={label}  pred={pred}  conf={conf_val:.3f}  u={u_csv:.6f}'
+        if margin is not None and np.isfinite(margin):
             title += f'  margin={margin:.3f}'
         plt.title(title)
         plt.tight_layout(); base=os.path.join(out_dir,f'clinical_{tag}_wave'); plt.savefig(base+'.png',dpi=300); plt.savefig(base+'.svg'); plt.close()
         colors=[PALETTE['vanilla']]*K; colors[pred]=PALETTE['puce']
         plt.figure(figsize=(4.2,3.4)); plt.bar(np.arange(K), prob, color=colors); plt.ylim(0,1.0)
         prob_title = f'Prob (pred={pred}, u={u_csv:.6f})'
-        if margin is not None and np.isfinite(margin) and margin>0:
+        if margin is not None and np.isfinite(margin):
             prob_title += f'  margin={margin:.3f}'
         plt.title(prob_title); plt.tight_layout(); base=os.path.join(out_dir,f'clinical_{tag}_prob'); plt.savefig(base+'.png',dpi=300); plt.savefig(base+'.svg'); plt.close()
 
     for r,row in enumerate(hi_rows):
-        render_case(int(row['index']), f'hi_u_{r}', float(row.get('uncertainty', 0.0)), float(row.get('confidence', 0.0)), float(row.get('margin', 0.0)))
+        render_case(int(row['index']), f'hi_u_{r}',
+                    float(row.get('uncertainty', 0.0)),
+                    label_hint=row.get('label', None),
+                    pred_hint=row.get('prediction', None),
+                    conf_hint=row.get('confidence', None),
+                    margin=float(row.get('margin', np.nan)))
     for r,row in enumerate(lo_rows):
-        render_case(int(row['index']), f'lo_u_{r}', float(row.get('uncertainty', 0.0)), float(row.get('confidence', 0.0)), float(row.get('margin', 0.0)))
+        render_case(int(row['index']), f'lo_u_{r}',
+                    float(row.get('uncertainty', 0.0)),
+                    label_hint=row.get('label', None),
+                    pred_hint=row.get('prediction', None),
+                    conf_hint=row.get('confidence', None),
+                    margin=float(row.get('margin', np.nan)))
 
     print(f'Saved clinical cases (high/low u) to: {out_base}/cases')
 
