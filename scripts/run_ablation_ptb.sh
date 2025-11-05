@@ -16,15 +16,18 @@ ROOT=/home/Data1/zbl/dataset/PTB
 
 # 来自最优配置（PTB）
 LR=1.5e-4
-ANNEAL=50
+ANNEAL=40
 E_LAYERS=4
 RES="2,4,6,8"
 BATCH=64
 EPOCHS=150
 PATIENCE=20
 DROPOUT=0.1
-WD=1e-4
+WD=0
 NODEDIM=10
+LAM_FUSE=1.0
+LAM_VIEW=1.0
+LAM_PSEUDO_LOSS=0.2
 
 OUT_DIR=results/ablation/PTB
 mkdir -p "$OUT_DIR"
@@ -96,6 +99,7 @@ for key in "${CONFIGS[@]}"; do
       --train_epochs "$EPOCHS" --patience "$PATIENCE" \
       --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD" \
       --nodedim "$NODEDIM" --gpu "$GPU" --swa \
+      --lambda_fuse "$LAM_FUSE" --lambda_view "$LAM_VIEW" --lambda_pseudo_loss "$LAM_PSEUDO_LOSS" \
       --seed "$s" $EXTRA_ARGS \
       > "$LOG" 2>&1
     RC=$?
