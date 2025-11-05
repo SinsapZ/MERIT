@@ -33,19 +33,29 @@ def main():
 
     u = np.load(uf); y = np.load(lf); p = np.load(pf)
     err = (p != y)
+
+    # 根据数据自适应截断上限：默认聚焦 0-0.05，如分布整体更大则放宽到99.5分位的1.05倍
+    zoom_default = 0.05
+    try:
+        p995 = float(np.percentile(u, 99.5))
+    except Exception:
+        p995 = float(np.max(u))
+    clip_hi = zoom_default if p995 <= zoom_default else float(min(np.max(u) * 1.05, p995 * 1.05))
+    clip_hi = max(clip_hi, zoom_default)  # 至少保持默认显示范围
+    print(f"[{args.dataset}] using uncertainty upper bound {clip_hi:.4f} for zoomed plots (p99.5={p995:.4f})")
     sns.set_style('whitegrid')
 
     # KDE 0-0.05（自适应y轴上限，避免数值过大）
     plt.figure(figsize=(7, 5))
-    sns.kdeplot(u[~err], bw_method=0.2, fill=True, alpha=0.35, color='#e1d89c', label='Correct', clip=(0, 0.05))
-    sns.kdeplot(u[err],  bw_method=0.2, fill=True, alpha=0.35, color='#e1c59c', label='Misclassified', clip=(0, 0.05))
-    plt.xlim(0, 0.05)
+    sns.kdeplot(u[~err], bw_method=0.2, fill=True, alpha=0.35, color='#e1d89c', label='Correct', clip=(0, clip_hi))
+    sns.kdeplot(u[err],  bw_method=0.2, fill=True, alpha=0.35, color='#e1c59c', label='Misclassified', clip=(0, clip_hi))
+    plt.xlim(0, clip_hi)
     # 估计直方图密度并设置上限为99分位的1.2倍，避免“尖峰”破坏观感
     try:
         uc = u[~err]; ue = u[err]
-        uc = uc[(uc>=0)&(uc<=0.05)]; ue = ue[(ue>=0)&(ue<=0.05)]
-        dens_c,_ = np.histogram(uc, bins=200, range=(0,0.05), density=True)
-        dens_e,_ = np.histogram(ue, bins=200, range=(0,0.05), density=True)
+        uc = uc[(uc>=0)&(uc<=clip_hi)]; ue = ue[(ue>=0)&(ue<=clip_hi)]
+        dens_c,_ = np.histogram(uc, bins=200, range=(0,clip_hi), density=True)
+        dens_e,_ = np.histogram(ue, bins=200, range=(0,clip_hi), density=True)
         ymax = np.percentile(np.concatenate([dens_c, dens_e]), 99)*1.2
         if np.isfinite(ymax) and ymax>0:
             plt.ylim(0, float(ymax))
@@ -60,7 +70,7 @@ def main():
     # Violin 0-0.05
     df = pd.DataFrame({'u': np.concatenate([u[~err], u[err]]),
                        'group': ['Correct']*int((~err).sum()) + ['Misclassified']*int(err.sum())})
-    df = df[df['u'] <= 0.05]
+    df = df[df['u'] <= clip_hi]
     plt.figure(figsize=(6, 4))
     sns.violinplot(data=df, x='group', y='u', hue='group', palette={'Correct':'#e1d89c','Misclassified':'#e1c59c'}, dodge=False, cut=0, inner=None, legend=False)
     med = df.groupby('group')['u'].median()

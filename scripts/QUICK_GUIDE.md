@@ -7,8 +7,8 @@ scripts/
 ├── 1. multi_seed_run.py           # 核心运行器
 ├── 2. find_best_params.sh         # 超参数搜索 (3×3×3=27)
 ├── 3. run_all_datasets.sh         # 主实验 (4数据集)
-├── 4. run_baselines.sh            # Baseline对比
-├── 5. run_ablation.sh             # 消融实验 (5变体)
+├── 4. run_baselines.sh            # Baseline对比（MedGNN+iTransformer+FEDformer+ECGFM+ECGFounder+FORMED）
+├── 5. run_ablation.sh / run_ablation_ptb.sh   # 消融实验 (5变体)
 ├── 6. summarize_all_datasets.py   # 结果汇总+LaTeX
 ├── 7. evaluate_uncertainty.py     # 不确定性评估
 ├── 8. analyze_uncertainty.py      # 不确定性全面分析
@@ -40,11 +40,14 @@ bash MERIT/scripts/run_all_datasets.sh
 bash MERIT/scripts/run_baselines.sh <DATASET>
 ```
 
-### 3️⃣ 消融实验（4小时，在PTB-XL和ADFD上）
+> 依赖说明：需要安装 MedGNN、FEDformer、FORMED 等外部仓库；TimesFM 若仅有 `.safetensors`，脚本会自动转换为 `.pth`。
+
+### 3️⃣ 消融实验（4小时，PTB/PTB-XL/ADFD）
 
 ```bash
 bash MERIT/scripts/run_ablation.sh PTB-XL 0
 bash MERIT/scripts/run_ablation.sh ADFD-Sample 0
+bash MERIT/scripts/run_ablation_ptb.sh 0
 ```
 
 ### 4️⃣ 不确定性分析（一键执行 + 人机协同产物 + SVG 导出）

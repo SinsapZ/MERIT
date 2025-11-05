@@ -12,7 +12,7 @@
 一键运行4个数据集的完整实验（用最佳配置）
 
 ### 4️⃣ `run_baselines.sh` ⭐对比
-运行Medformer和iTransformer baseline
+统一运行 **MedGNN、iTransformer、FEDformer、ECGFM、ECGFounder、FORMED**（按数据集自动裁剪，支持 APAVA/PTB/PTB-XL），并生成日志、CSV。
 
 ### 5️⃣ `run_ablation.sh` ⭐消融
 5个变体消融实验（证明各组件有效性）
@@ -82,10 +82,16 @@ bash MERIT/scripts/run_all_datasets.sh
 
 ```bash
 bash MERIT/scripts/run_baselines.sh APAVA
-bash MERIT/scripts/run_baselines.sh ADFD-Sample
 bash MERIT/scripts/run_baselines.sh PTB
 bash MERIT/scripts/run_baselines.sh PTB-XL
 ```
+
+> **环境提示**
+> - MedGNN / iTransformer：需要 `MedGNN/MedGNN` 仓库及依赖。
+> - FEDformer：需要 `FEDformer/FEDformer` 仓库，默认使用原作者的长序列预测脚本。
+> - ECGFM：默认读取 `ECGFM/checkpoint/last_11597276.ckpt`（如存在）或官方 `ecg_fm/mimic_iv_ecg_physionet_pretrained.pt`，并复用我们现有的 MERIT 数据 loader。
+> - FORMED：若 TimesFM 只有 `model.safetensors`，脚本会自动调用 `convert_timesfm_checkpoint.py` 转为 `.pth` 并缓存。
+> - 以上脚本一次跑 3 个种子（41/42/43），结果写入 `results/baselines/<DATASET>/`。
 
 ---
 
@@ -135,8 +141,8 @@ python MERIT/scripts/summarize_all_datasets.py
 ### 必做实验（8个）
 
 1. ✅ **4个数据集性能** - `run_all_datasets.sh`
-2. ✅ **Baseline对比** - `run_baselines.sh` (Medformer, iTransformer)
-3. ✅ **消融实验** - `run_ablation.sh` (5个变体)
+2. ✅ **Baseline对比** - `run_baselines.sh` (MedGNN, iTransformer, FEDformer, ECGFM, ECGFounder, FORMED)
+3. ✅ **消融实验** - `run_ablation.sh` / `run_ablation_ptb.sh` (5个变体)
 4. ✅ **ECE校准** - `evaluate_uncertainty.py`
 5. ✅ **Selective Prediction** - `evaluate_uncertainty.py`
 6. ✅ **不确定性分布** - `analyze_uncertainty.py`
@@ -157,7 +163,7 @@ python MERIT/scripts/summarize_all_datasets.py
 | 超参数搜索 | find_best_params.sh | 10小时 |
 | 主实验(4数据集) | run_all_datasets.sh | 8小时 |
 | Baseline对比 | run_baselines.sh | 4小时 |
-| 消融实验(2数据集) | run_ablation.sh | 4小时 |
+| 消融实验(PTB) | run_ablation_ptb.sh | 4小时 |
 | 不确定性评估 | evaluate/analyze_uncertainty.py | 2小时 |
 | **总计** | - | **~28小时** |
 
