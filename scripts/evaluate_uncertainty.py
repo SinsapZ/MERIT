@@ -84,14 +84,7 @@ def main():
     errors = (predictions != labels).astype(float)
     accuracy = 1.0 - errors.mean()
     
-    # 对 PTB / PTB-XL，单方法图按 1-u 展示以便于与旧图一致
     plot_conf = confidences.copy()
-    if args.dataset_name in ('PTB','PTB-XL'):
-        try:
-            uncertainties = np.load(os.path.join(args.uncertainty_dir, 'uncertainties.npy'))
-            plot_conf = 1.0 - uncertainties
-        except Exception:
-            pass
 
     # 1. ECE
     ece, bin_accs, bin_confs = compute_ece(plot_conf, predictions, labels)

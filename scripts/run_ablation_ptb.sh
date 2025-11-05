@@ -10,6 +10,7 @@ set -e
 
 GPU=${1:-0}
 SEEDS=${2:-"41,42,43"}
+ONLY=${3:-"all"}
 
 DATA=PTB
 ROOT=/home/Data1/zbl/dataset/PTB
@@ -56,7 +57,12 @@ EXTRA[no_freq]="--use_ds --no_freq"
 NAMES[no_pseudo]="w/o Pseudo-view"
 EXTRA[no_pseudo]="--use_ds --no_pseudo"
 
-CONFIGS=(full no_evi no_diff no_freq no_pseudo)
+DEFAULT_CONFIGS=(full no_evi no_diff no_freq no_pseudo)
+if [ "$ONLY" = "all" ]; then
+  CONFIGS=("${DEFAULT_CONFIGS[@]}")
+else
+  IFS=',' read -ra CONFIGS <<< "$ONLY"
+fi
 
 parse_and_append() {
   local txt="$1"; local csv="$2"; local seed="$3"

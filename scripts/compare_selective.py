@@ -86,8 +86,7 @@ def main():
         cov, acc = selective_prediction(c,p,y)
         return 100-cov, acc
 
-    # 对 PTB / PTB-XL 默认 legacy1u；可用 --metric 覆盖
-    metric_evi = args.metric if args.metric!='native' else ('legacy1u' if args.dataset in ('PTB','PTB-XL') else 'native')
+    metric_evi = args.metric
     metric_soft = 'prob' if args.metric in ('prob','margin','neg_entropy') else 'native'
     re_e, ac_e = load_curve(evi_dir, metric=metric_evi)
     re_s, ac_s = load_curve(soft_dir, metric=metric_soft)

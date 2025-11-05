@@ -137,7 +137,10 @@ class Model(nn.Module):
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, mask=None):
         B, T, C = x_enc.shape
         multi_res_data = self.multi_res_data(x_enc)
-        enc_out_1 = self.freq_embedding(multi_res_data) if self.enable_freq else [torch.zeros_like(multi_res_data[l]) for l in range(self.res_num)]
+        if self.enable_freq:
+            enc_out_1 = self.freq_embedding(multi_res_data)
+        else:
+            enc_out_1 = [multi_res_data[l].new_zeros((multi_res_data[l].shape[0], self.enc_in, self.d_model)) for l in range(self.res_num)]
         if self.enable_diff:
             x_diff_emb, x_padding = self.diff_data_emb(multi_res_data)
             x_diff_enc, attns = self.difference_attention(x_diff_emb, attn_mask=None)
