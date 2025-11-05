@@ -6,6 +6,17 @@ DATASET=$1
 GPU=${2:-0}
 SEEDS="41,42,43"  # 3个seeds快速验证
 
+set -o pipefail
+
+format_time() {
+    local T=$1
+    if [ -z "$T" ] || [ "$T" -lt 0 ]; then
+        echo "00:00:00"
+        return
+    fi
+    printf "%02d:%02d:%02d" $((T/3600)) $(((T%3600)/60)) $((T%60))
+}
+
 if [ -z "$DATASET" ]; then
     echo "Usage: bash find_best_params.sh <DATASET> [GPU]"
     echo "Available: APAVA, ADFD, ADFD-Sample, PTB, PTB-XL"
@@ -74,6 +85,9 @@ echo "开始时间: $(date)"
 echo ""
 
 CONFIG_ID=0
+CONFIG_TOTAL=27
+SCRIPT_START=$(date +%s)
+TOTAL_ELAPSED=0
 
 # 学习率: 3个
 for lr in 1e-4 1.5e-4 2e-4; do
@@ -88,8 +102,12 @@ for lr in 1e-4 1.5e-4 2e-4; do
             
             echo ""
             echo "================================================================"
-            echo "Config $CONFIG_ID/27: lr=$lr, λ_view=$lambda_view, λ_pseudo=$lambda_pseudo"
+            echo "Config $CONFIG_ID/$CONFIG_TOTAL: lr=$lr, λ_view=$lambda_view, λ_pseudo=$lambda_pseudo"
             echo "================================================================"
+            config_start=$(date +%s)
+
+            LOG_FILE="results/param_search/$DATASET/config${CONFIG_ID}_lr${lr}_lv${lambda_view}_lp${lambda_pseudo}.log"
+            echo "[进度] $(date '+%F %T') ▶️ 开始运行配置 $CONFIG_ID/$CONFIG_TOTAL (输出保存到 $LOG_FILE)"
             
             # 根据学习率调整epochs
             case $lr in
@@ -122,7 +140,22 @@ for lr in 1e-4 1.5e-4 2e-4; do
               --resolution_list $RESOLUTION_LIST \
               --seeds "$SEEDS" \
               --log_csv results/param_search/$DATASET/config${CONFIG_ID}_lr${lr}_lv${lambda_view}_lp${lambda_pseudo}.csv \
-              2>&1 | grep -E "(completed|Test - Acc)"
+              2>&1 | tee "$LOG_FILE"
+
+            status=${PIPESTATUS[0]}
+            config_end=$(date +%s)
+            config_elapsed=$((config_end - config_start))
+            TOTAL_ELAPSED=$((TOTAL_ELAPSED + config_elapsed))
+            avg_elapsed=$((TOTAL_ELAPSED / CONFIG_ID))
+            remaining=$((CONFIG_TOTAL - CONFIG_ID))
+            eta=$((avg_elapsed * remaining))
+
+            if [ $status -eq 0 ]; then
+                echo "[进度] $(date '+%F %T') ✅ Config $CONFIG_ID/$CONFIG_TOTAL 完成 (用时: $(format_time $config_elapsed))"
+            else
+                echo "[进度] $(date '+%F %T') ❌ Config $CONFIG_ID/$CONFIG_TOTAL 失败 (请查看 $LOG_FILE)"
+            fi
+            echo "[统计] 累计用时 $(format_time $TOTAL_ELAPSED) | 平均/配置 $(format_time $avg_elapsed) | 预计剩余 $(format_time $eta)"
             
         done
     done
@@ -132,6 +165,8 @@ echo ""
 echo "========================================================================"
 echo "搜索完成！分析结果..."
 echo "结束时间: $(date)"
+TOTAL_TIME=$(( $(date +%s) - SCRIPT_START ))
+echo "总耗时: $(format_time $TOTAL_TIME)"
 echo "========================================================================"
 
 # 自动分析找出最佳配置
