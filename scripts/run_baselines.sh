@@ -3,7 +3,7 @@
 # 使用MedGNN项目中已实现的模型
 
 DATASET=$1  # APAVA, ADFD-Sample, PTB, PTB-XL
-SEEDS="41,42,43,44,45,46,47,48,49,50"
+SEEDS="41,42,43"
 GPU=0
 
 if [ -z "$DATASET" ]; then
@@ -50,28 +50,30 @@ esac
 
 echo "========================================================"
 echo "运行Baseline模型 - $DATASET"
-echo "Baselines: Medformer, iTransformer, FEDformer, CrossGNN, MedGNN"
+echo "Baselines: MedGNN, iTransformer, FEDformer, ECGFM, ECGFounder, FORMED"
 echo "========================================================"
 
 mkdir -p results/baselines/$DATASET
+BASELINE_OUTPUT_DIR="$REPO_ROOT/results/baselines/$DATASET"
 
 # 计算仓库根目录（本脚本位于 MERIT/MERIT/scripts 下）
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
-# 切到 MedGNN 目录
+# 切到 MedGNN 目录（仅为了 iTransformer）
 if [ -d "$REPO_ROOT/MedGNN/MedGNN" ]; then
   pushd "$REPO_ROOT/MedGNN/MedGNN" >/dev/null
 else
-  echo "MedGNN/MedGNN 不存在，无法运行 Medformer/iTransformer 基线。"; exit 1
+  echo "MedGNN/MedGNN 不存在，无法运行 iTransformer 基线。"; exit 1
 fi
 
 # ============================================================
-# Baseline 1: Medformer
+# Baseline 1: MedGNN
 # ============================================================
 echo ""
 echo "========================================================"
-echo "Running Medformer on $DATASET"
+echo "Running MedGNN on $DATASET"
 echo "========================================================"
 
 for seed in ${SEEDS//,/ }; do
@@ -80,8 +82,8 @@ for seed in ${SEEDS//,/ }; do
         --task_name classification \
         --is_training 1 \
         --root_path $ROOT_PATH \
-        --model_id ${DATASET}-Medformer \
-        --model Medformer \
+        --model_id ${DATASET}-MedGNN \
+        --model MedGNN \
         --data $DATASET \
         --e_layers $E_LAYERS \
         --batch_size $BATCH_SIZE \
@@ -97,7 +99,7 @@ for seed in ${SEEDS//,/ }; do
         --gpu $GPU \
         --seed $seed \
         2>&1 | grep -E "(Validation|Test) results"
-done > "$REPO_ROOT/results/baselines/$DATASET/medformer_results.txt"
+done > "$BASELINE_OUTPUT_DIR/medgnn_results.txt"
 
 # ============================================================
 # Baseline 2: iTransformer
@@ -130,10 +132,10 @@ for seed in ${SEEDS//,/ }; do
         --gpu $GPU \
         --seed $seed \
         2>&1 | grep -E "(Validation|Test) results"
-done > "$REPO_ROOT/results/baselines/$DATASET/itransformer_results.txt"
+    done > "$BASELINE_OUTPUT_DIR/itransformer_results.txt"
 
 # ============================================================
-# Baseline 3: FEDformer (来自独立项目)
+# Baseline 2: FEDformer (来自独立项目)
 # ============================================================
 echo ""
 echo "========================================================"
@@ -172,7 +174,7 @@ if [ -f run.py ]; then
             --itr 1 \
             --des Baseline-FED \
             2>&1
-    done > "$REPO_ROOT/results/baselines/$DATASET/fedformer_results.txt"
+    done > "$BASELINE_OUTPUT_DIR/fedformer_results.txt"
 else
     echo "未找到 FEDformer/run.py，跳过FEDformer基线。"
 fi
@@ -180,59 +182,63 @@ fi
 popd >/dev/null
 
 # ============================================================
-# Baseline 4: CrossGNN (来自独立项目)
+# Baseline 5: ECGFM (可选)
 # ============================================================
-echo ""
-echo "========================================================"
-echo "Running CrossGNN on $DATASET"
-echo "========================================================"
-
-# 切换到 CrossGNN 目录（项目根目录下的 CrossGNN/CrossGNN）
-if [ -d "$REPO_ROOT/CrossGNN/CrossGNN" ]; then
-  pushd "$REPO_ROOT/CrossGNN/CrossGNN" >/dev/null
-else
-  echo "未找到 CrossGNN/CrossGNN，跳过CrossGNN基线。"
+DEFAULT_ECGFM_CKPT="$WORKSPACE_ROOT/ECGFM/ecg-fm-benchmarking/checkpoint/ecg_fm/mimic_iv_ecg_physionet_pretrained.pt"
+ALT_ECGFM_CKPT="$WORKSPACE_ROOT/ECGFM/checkpoint/last_11597276.ckpt"
+SELECTED_ECGFM_CKPT=${ECGFM_CHECKPOINT:-$DEFAULT_ECGFM_CKPT}
+if [ ! -f "$SELECTED_ECGFM_CKPT" ] && [ -f "$ALT_ECGFM_CKPT" ]; then
+  SELECTED_ECGFM_CKPT="$ALT_ECGFM_CKPT"
 fi
 
-if [ -f run_longExp.py ]; then
-    for seed in ${SEEDS//,/ }; do
-        echo "Seed $seed..."
-        python -u run_longExp.py \
-            --is_training 1 \
-            --model_id ${DATASET}-CrossGNN \
-            --model CrossGNN \
-            --data $DATASET \
-            --root_path $ROOT_PATH \
-            --seq_len 128 \
-            --label_len 64 \
-            --pred_len 64 \
-            --d_model 256 \
-            --d_ff 512 \
-            --n_heads 8 \
-            --e_layers $E_LAYERS \
-            --batch_size $BATCH_SIZE \
-            --learning_rate 0.0001 \
-            --train_epochs 10 \
-            --patience 3 \
-            --gpu $GPU \
-            --itr 1 \
-            --des Baseline-CrossGNN \
-            2>&1
-    done > "$REPO_ROOT/results/baselines/$DATASET/crossgnn_results.txt"
+if [ -f "$SELECTED_ECGFM_CKPT" ]; then
+  echo ""
+  echo "========================================================"
+  echo "Running ECGFM on $DATASET"
+  echo "========================================================"
+  mkdir -p "$BASELINE_OUTPUT_DIR/ecgfm"
+  ECGFM_CHECKPOINT="$SELECTED_ECGFM_CKPT" bash "$SCRIPT_DIR/baseline_ecgfm.sh" "$DATASET" "$BASELINE_OUTPUT_DIR/ecgfm" \
+    | tee "$BASELINE_OUTPUT_DIR/ecgfm/ecgfm_${DATASET}.log"
 else
-    echo "未找到 CrossGNN/run_longExp.py，跳过CrossGNN基线。"
+  echo "未找到 ECGFM checkpoint ($SELECTED_ECGFM_CKPT)，跳过 ECGFM baseline。"
 fi
 
-popd >/dev/null
+# ============================================================
+# Baseline 6: ECGFounder fine-tune (可选)
+# ============================================================
+if [ -n "${ECGFOUNDER_CKPT:-}" ]; then
+  echo ""
+  echo "========================================================"
+  echo "Running ECGFounder on $DATASET"
+  echo "========================================================"
+  mkdir -p "$BASELINE_OUTPUT_DIR/ecgfounder"
+  bash "$SCRIPT_DIR/baseline_ecgfounder.sh" "$DATASET" "$ROOT_PATH" \
+    "$BASELINE_OUTPUT_DIR/ecgfounder" \
+    | tee "$BASELINE_OUTPUT_DIR/ecgfounder/ecgfounder_${DATASET}.log"
+else
+  echo "ECGFOUNDER_CKPT 未设置，跳过 ECGFounder baseline。"
+fi
 
 # ============================================================
-# Baseline 3: MedGNN (参考)
+# Baseline 7: FORMED adapting (PTB/PTB-XL/APAVA)
 # ============================================================
-echo ""
-echo "========================================================"
-echo "MedGNN Results (从论文)"
-echo "说明: MedGNN的结果可以直接从论文中引用"
-echo "========================================================"
+if [[ "$DATASET" =~ ^PTB ]] || [ "$DATASET" == "APAVA" ]; then
+  DEFAULT_FORMED_BASE="$WORKSPACE_ROOT/FORMED/FORMED/checkpoint/timesfm-2.0-500m-base.pth"
+  SELECTED_FORMED_BASE=${FORMED_BASE_MODEL:-$DEFAULT_FORMED_BASE}
+  if [ -f "$SELECTED_FORMED_BASE" ]; then
+    echo ""
+    echo "========================================================"
+    echo "Running FORMED on $DATASET"
+    echo "========================================================"
+    mkdir -p "$BASELINE_OUTPUT_DIR/formed"
+    FORMED_BASE_MODEL="$SELECTED_FORMED_BASE" bash "$SCRIPT_DIR/baseline_formed.sh" "$DATASET" "$BASELINE_OUTPUT_DIR/formed" \
+      | tee "$BASELINE_OUTPUT_DIR/formed/formed_${DATASET}.log"
+  else
+    echo "未找到 TimesFM checkpoint ($SELECTED_FORMED_BASE)，跳过 FORMED baseline。"
+  fi
+else
+  echo "FORMED baseline 暂仅支持 PTB、PTB-XL、APAVA，当前数据集 $DATASET 跳过。"
+fi
 
 # 留在脚本所在目录（可选）
 cd "$SCRIPT_DIR"

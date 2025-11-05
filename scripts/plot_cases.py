@@ -179,7 +179,14 @@ def plot_cases(ds, root, res, out_base, plots_evi_dir,
         if prob is None:
             return
         K = prob.shape[0]
-        pred = int(pred_hint) if pred_hint is not None and pred_hint >= 0 else int(np.argmax(prob))
+        prob_argmax = int(np.argmax(prob))
+        if pred_hint is not None and pred_hint >= 0:
+            pred = int(pred_hint)
+            if pred != prob_argmax:
+                print(f"[warn] prediction mismatch for idx={idx}: csv={pred}, argmax={prob_argmax}; highlighting argmax")
+                pred = prob_argmax
+        else:
+            pred = prob_argmax
         conf_val = float(prob[pred]) if 0 <= pred < K else float(prob.max())
         if conf_hint is not None and np.isfinite(conf_hint):
             conf_val = float(conf_hint)
@@ -197,7 +204,22 @@ def plot_cases(ds, root, res, out_base, plots_evi_dir,
         plt.title(title)
         plt.tight_layout(); base=os.path.join(out_dir,f'clinical_{tag}_wave'); plt.savefig(base+'.png',dpi=300); plt.savefig(base+'.svg'); plt.close()
         colors=[PALETTE['vanilla']]*K; colors[pred]=PALETTE['puce']
-        plt.figure(figsize=(4.2,3.4)); plt.bar(np.arange(K), prob, color=colors); plt.ylim(0,1.0)
+        plt.figure(figsize=(4.2,3.4))
+        bars = plt.bar(np.arange(K), prob, color=colors)
+        ymax = min(1.0, float(prob.max()) + 0.05)
+        ymin = max(0.0, float(prob.min()) - 0.05)
+        if ymax - ymin < 0.2:
+            midpoint = (ymax + ymin) / 2.0
+            ymax = min(1.0, midpoint + 0.1)
+            ymin = max(0.0, midpoint - 0.1)
+        plt.ylim(ymin, ymax)
+        for i, b in enumerate(bars):
+            plt.text(
+                b.get_x() + b.get_width() / 2.0,
+                b.get_height() + 0.01 * (ymax - ymin),
+                f"{prob[i]:.3f}",
+                ha='center', va='bottom', fontsize=9, color=PALETTE['gray']
+            )
         prob_title = f'Prob (pred={pred}, u={u_csv:.6f})'
         if margin is not None and np.isfinite(margin):
             prob_title += f'  margin={margin:.3f}'
