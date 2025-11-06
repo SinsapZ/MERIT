@@ -98,8 +98,8 @@ class APAVALoader(Dataset):
                 return default
             return value
 
-        train_ratio = _read_ratio("APAVA_TRAIN_RATIO", 0.8)
-        val_ratio = _read_ratio("APAVA_VAL_RATIO", 0.1)
+        train_ratio = _read_ratio("APAVA_TRAIN_RATIO", 0.85)
+        val_ratio = _read_ratio("APAVA_VAL_RATIO", 0.05)
         test_ratio = _read_ratio("APAVA_TEST_RATIO", 0.1)
 
         total = train_ratio + val_ratio + test_ratio
