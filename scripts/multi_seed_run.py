@@ -65,6 +65,10 @@ def main():
     parser.add_argument("--lr_scheduler", type=str, default="none", choices=["none", "cosine", "step"])
     parser.add_argument("--warmup_epochs", type=int, default=0)
     parser.add_argument("--use_gnn", action="store_true", default=False, help="enable multi-resolution GNN")
+    parser.add_argument("--use_evi_loss", action="store_true", default=False)
+    parser.add_argument("--lambda_evi", type=float, default=1.0)
+    parser.add_argument("--lambda_pseudo", type=float, default=1.0)
+    parser.add_argument("--agg", type=str, default="evi")
     
     # Multi-seed configuration
     parser.add_argument("--seeds", type=str, default="41,42,43,44,45", help="Comma-separated list of seeds")
@@ -108,6 +112,9 @@ def main():
                 '--nodedim', str(args.nodedim),
                 '--lr_scheduler', args.lr_scheduler,
                 '--warmup_epochs', str(args.warmup_epochs),
+                '--agg', args.agg,
+                '--lambda_evi', str(args.lambda_evi),
+                '--lambda_pseudo', str(args.lambda_pseudo),
                 '--gpu', str(args.gpu),
                 '--seed', str(seed),
             ]
@@ -118,6 +125,9 @@ def main():
             if args.use_gnn:
                 cmd.append('--use_gnn')
             
+            if args.use_evi_loss:
+                cmd.append('--use_evi_loss')
+
             print(f'\n{"="*60}')
             print(f'Running seed {seed}...')
             print(f'Command: {" ".join(cmd)}')

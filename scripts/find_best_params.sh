@@ -32,6 +32,7 @@ case $DATASET in
         E_LAYERS=4
         RESOLUTION_LIST="2,4,6,8"
         DROPOUT=0.1
+        EXTRA_ARGS="--use_evi_loss --lambda_evi 1.0 --lambda_pseudo 1.0"
         ;;
     "ADFD")
         ROOT_PATH="/home/Data1/zbl/dataset/ADFD"
@@ -39,6 +40,7 @@ case $DATASET in
         RESOLUTION_LIST="2"
         DROPOUT=0.2
         BATCH_SIZE=128
+        EXTRA_ARGS=""
         ;;
     "ADFD-Sample")
         ROOT_PATH="/home/Data1/zbl/dataset/ADFD"
@@ -46,24 +48,29 @@ case $DATASET in
         RESOLUTION_LIST="2"
         DROPOUT=0.2
         BATCH_SIZE=128
+        EXTRA_ARGS=""
         ;;
     "PTB")
         ROOT_PATH="/home/Data1/zbl/dataset/PTB"
         E_LAYERS=4
         RESOLUTION_LIST="2,4,6,8"
         DROPOUT=0.1
+        EXTRA_ARGS=""
         ;;
     "PTB-XL")
         ROOT_PATH="/home/Data1/zbl/dataset/PTB-XL"
         E_LAYERS=4
         RESOLUTION_LIST="2,4,6,8"
         DROPOUT=0.1
+        EXTRA_ARGS=""
         ;;
     *)
         echo "Unknown dataset: $DATASET"
         exit 1
         ;;
 esac
+
+EXTRA_ARGS=${EXTRA_ARGS:-""}
 
 mkdir -p results/param_search/$DATASET
 
@@ -140,6 +147,7 @@ for lr in 1e-4 1.5e-4 2e-4; do
               --resolution_list $RESOLUTION_LIST \
               --seeds "$SEEDS" \
               --log_csv results/param_search/$DATASET/config${CONFIG_ID}_lr${lr}_lv${lambda_view}_lp${lambda_pseudo}.csv \
+              $EXTRA_ARGS \
               2>&1 | tee "$LOG_FILE"
 
             status=${PIPESTATUS[0]}

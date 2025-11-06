@@ -23,6 +23,7 @@ case $DATASET in
         E_LAYERS=4
         RESOLUTION_LIST="2,4,6,8"
         DROPOUT=0.1
+        EXTRA_ARGS="--use_evi_loss --lambda_evi 1.0 --lambda_pseudo 1.0"
         ;;
     "ADFD")
         ROOT_PATH="/home/Data1/zbl/dataset/ADFD"
@@ -35,6 +36,7 @@ case $DATASET in
         WARMUP_EPOCHS=5
         EVI_DROPOUT=0.10
         WEIGHT_DECAY=1e-4
+        EXTRA_ARGS=""
         ;;
     "ADFD-Sample")
         ROOT_PATH="/home/Data1/zbl/dataset/ADFD"
@@ -47,24 +49,29 @@ case $DATASET in
         WARMUP_EPOCHS=5
         EVI_DROPOUT=0.05
         WEIGHT_DECAY=5e-5
+        EXTRA_ARGS=""
         ;;
     "PTB")
         ROOT_PATH="/home/Data1/zbl/dataset/PTB"
         E_LAYERS=4
         RESOLUTION_LIST="2,4,6,8"
         DROPOUT=0.1
+        EXTRA_ARGS=""
         ;;
     "PTB-XL")
         ROOT_PATH="/home/Data1/zbl/dataset/PTB-XL"
         E_LAYERS=4
         RESOLUTION_LIST="2,4,6,8"
         DROPOUT=0.1
+        EXTRA_ARGS=""
         ;;
     *)
         echo "Unknown dataset: $DATASET"
         exit 1
         ;;
 esac
+
+EXTRA_ARGS=${EXTRA_ARGS:-""}
 
 RESULT_DIR="results/param_search/$DATASET"
 mkdir -p $RESULT_DIR
@@ -134,6 +141,7 @@ if [ "$STAGE" == "all" ] || [ "$STAGE" == "stage1" ]; then
                   --resolution_list $RESOLUTION_LIST \
                   --seeds "41" \
                   --log_csv $RESULT_DIR/stage1_config${CONFIG_ID}.csv \
+                  $EXTRA_ARGS \
                   2>&1 | grep -E "(completed|Test - Acc)"
                 
             done
@@ -275,6 +283,7 @@ EOF
                   --resolution_list $RESOLUTION_LIST \
                   --seeds "41,42,43" \
                   --log_csv $RESULT_DIR/stage2_config${CONFIG_ID}.csv \
+                  $EXTRA_ARGS \
                   2>&1 | grep -E "(completed|Test - Acc)"
                 
             done
