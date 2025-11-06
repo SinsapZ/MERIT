@@ -11,12 +11,19 @@ class APAVALoader(Dataset):
         self.root_path = root_path
         self.data_path = os.path.join(root_path, "Feature/")
         self.label_path = os.path.join(root_path, "Label/label.npy")
-        data_list = np.load(self.label_path)
-        all_ids = list(data_list[:, 1])
-        val_ids = [15, 16, 19, 20]
-        test_ids = [1, 2, 17, 18]
-        train_ids = [int(i) for i in all_ids if i not in val_ids + test_ids]
+
+        subject_label = np.load(self.label_path)
+        split_mode = os.getenv("APAVA_SPLIT_MODE", "stratified").lower()
+
+        if split_mode == "original":
+            train_ids, val_ids, test_ids, split_desc = self._original_split(subject_label)
+        else:
+            train_ids, val_ids, test_ids, split_desc = self._stratified_split(subject_label, split_mode)
+
         self.train_ids, self.val_ids, self.test_ids = train_ids, val_ids, test_ids
+
+        print(f"[APAVA] Using subject split: {split_desc}")
+
         self.X, self.y = self.load_apava(self.data_path, self.label_path, flag=flag)
         # remap labels to contiguous [0, K-1]
         uniq = np.unique(self.y)
@@ -63,6 +70,89 @@ class APAVALoader(Dataset):
 
     def __len__(self):
         return len(self.y)
+
+    def _original_split(self, subject_label):
+        """Replicates the hard-coded split used in the original MedGNN code."""
+        all_ids = [int(i) for i in subject_label[:, 1]]
+        val_ids = [15, 16, 19, 20]
+        test_ids = [1, 2, 17, 18]
+        train_ids = [sid for sid in all_ids if sid not in val_ids + test_ids]
+        desc = "original (train {} / val {} / test {})".format(len(train_ids), len(val_ids), len(test_ids))
+        return train_ids, val_ids, test_ids, desc
+
+    def _stratified_split(self, subject_label, requested_mode):
+        """Create a stratified subject-level split with configurable ratios."""
+        from sklearn.model_selection import train_test_split
+
+        def _read_ratio(key, default):
+            raw = os.getenv(key)
+            if raw is None:
+                return default
+            try:
+                value = float(raw)
+            except ValueError:
+                print(f"[APAVA] Invalid value for {key}={raw}. Using default {default}.")
+                return default
+            if value <= 0:
+                print(f"[APAVA] {key} must be positive. Using default {default}.")
+                return default
+            return value
+
+        train_ratio = _read_ratio("APAVA_TRAIN_RATIO", 0.6)
+        val_ratio = _read_ratio("APAVA_VAL_RATIO", 0.2)
+        test_ratio = _read_ratio("APAVA_TEST_RATIO", 0.2)
+
+        total = train_ratio + val_ratio + test_ratio
+        if not np.isclose(total, 1.0):
+            train_ratio /= total
+            val_ratio /= total
+            test_ratio /= total
+            print(
+                f"[APAVA] Ratios normalised to train={train_ratio:.3f}, val={val_ratio:.3f}, test={test_ratio:.3f}."
+            )
+
+        subjects = subject_label[:, 1].astype(int)
+        labels = subject_label[:, 0]
+        unique_labels, counts = np.unique(labels, return_counts=True)
+
+        if np.any(counts < 3):
+            print(
+                "[APAVA] Not enough subjects per class for stratified split. Falling back to original split."
+            )
+            return self._original_split(subject_label)
+
+        seed = int(os.getenv("APAVA_SPLIT_SEED", 41))
+
+        try:
+            rest_ratio = 1.0 - train_ratio
+            train_ids, temp_ids, train_lbls, temp_lbls = train_test_split(
+                subjects,
+                labels,
+                test_size=rest_ratio,
+                random_state=seed,
+                stratify=labels,
+            )
+
+            if len(np.unique(temp_lbls)) < len(unique_labels):
+                raise ValueError("validation/test pool dropped a class")
+
+            test_size = test_ratio / rest_ratio if rest_ratio > 0 else 0.5
+            val_ids, test_ids, val_lbls, test_lbls = train_test_split(
+                temp_ids,
+                temp_lbls,
+                test_size=test_size,
+                random_state=seed,
+                stratify=temp_lbls,
+            )
+        except ValueError as exc:
+            print(f"[APAVA] Stratified split failed: {exc}. Falling back to original split.")
+            return self._original_split(subject_label)
+
+        desc = (
+            f"stratified (seed={seed}, ratios= {train_ratio:.2f}/{val_ratio:.2f}/{test_ratio:.2f}, "
+            f"subjects {len(train_ids)}/{len(val_ids)}/{len(test_ids)})"
+        )
+        return list(train_ids), list(val_ids), list(test_ids), desc
 
 
 # The following dataset classes are simplified placeholders. Extend as needed.

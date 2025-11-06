@@ -56,6 +56,9 @@ def main():
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--train_epochs", type=int, default=150)
     parser.add_argument("--patience", type=int, default=20)
+    parser.add_argument("--eval_only", action="store_true", default=False)
+    parser.add_argument("--disable_ds", action="store_true", default=False,
+                        help="skip adding --use_ds flag when invoking MERIT.run")
     
     # Additional optimization parameters
     parser.add_argument("--dropout", type=float, default=0.1)
@@ -95,7 +98,6 @@ def main():
                 '--model', args.model,
                 '--data', args.data,
                 '--root_path', args.root_path,
-                '--use_ds',
                 '--learning_rate', str(args.lr),
                 '--lambda_fuse', str(args.lambda_fuse),
                 '--lambda_view', str(args.lambda_view),
@@ -118,7 +120,13 @@ def main():
                 '--gpu', str(args.gpu),
                 '--seed', str(seed),
             ]
-            
+
+            if not args.disable_ds:
+                cmd.append('--use_ds')
+
+            if args.eval_only:
+                cmd.extend(['--task_name', 'classification', '--is_training', '0', '--save_uncertainty'])
+
             if args.swa:
                 cmd.append('--swa')
             
