@@ -6,6 +6,62 @@ set -e
 
 GPU=${1:-0}
 
+# ===================== 进度与计时（可视化终端界面） =====================
+# 说明：为每个步骤提供一个实时计时器与总体进度 [step/total]
+# 依赖：仅 Bash 与标准工具，无需额外安装
+
+STEP_IDX=0
+TOTAL_STEPS=0
+STEPS_PER_DATASET=12   # 本脚本对每个数据集共有 12 个步骤（见 run_one_dataset 内）
+DATASETS_ORDER="APAVA PTB PTB-XL"
+
+# 计算总步数（便于打印 [k/N]）
+for __ds in $DATASETS_ORDER; do
+  TOTAL_STEPS=$((TOTAL_STEPS + STEPS_PER_DATASET))
+done
+
+human_time() {
+  local sec=$1
+  printf "%02d:%02d:%02d" $((sec/3600)) $(((sec%3600)/60)) $((sec%60))
+}
+
+run_step() {
+  local desc="$1"; shift
+  STEP_IDX=$((STEP_IDX + 1))
+  local start_ts=$(date +%s)
+  local prefix="[${STEP_IDX}/${TOTAL_STEPS}]"
+  printf "\n%s ▶ %s\n" "$prefix" "$desc"
+
+  # 启动一个轻量计时器，1s 刷新一次当前耗时。
+  (
+    while true; do
+      local now=$(date +%s)
+      local elapsed=$((now - start_ts))
+      printf "\r   ⏱ 用时 %s" "$(human_time "$elapsed")"
+      sleep 1
+    done
+  ) &
+  local timer_pid=$!
+
+  # 执行命令（支持管道），输出照常打印
+  set +e
+  "$@"
+  local rc=$?
+  set -e
+
+  # 结束计时器并打印汇总行
+  kill "$timer_pid" >/dev/null 2>&1 || true
+  wait "$timer_pid" 2>/dev/null || true
+  local end_ts=$(date +%s)
+  local took=$((end_ts - start_ts))
+  if [ $rc -eq 0 ]; then
+    printf "\r%s ✔ %s（用时 %s）\n" "$prefix" "$desc" "$(human_time "$took")"
+  else
+    printf "\r%s ✗ %s（用时 %s）\n" "$prefix" "$desc" "$(human_time "$took")"
+  fi
+  return $rc
+}
+
 # ===================== 配置每个数据集的最佳参数 =====================
 declare -A ROOTS
 declare -A LRS
@@ -80,103 +136,103 @@ run_one_dataset() {
   # --- 1) 训练并保存不确定性数组：EviMR ---
   EVI_DIR="$OUT_BASE/$DS/evi"
   mkdir -p "$EVI_DIR"
-  python -m MERIT.run \
-    --model MERIT --data "$DS" --root_path "$ROOT" \
-    --model_id "UNCERT-${DS}-EVI" \
+  run_step "训练并保存不确定性（EviMR）: $DS" bash -lc "python -m MERIT.run \
+    --model MERIT --data '$DS' --root_path '$ROOT' \
+    --model_id 'UNCERT-${DS}-EVI' \
     --use_ds \
-    --learning_rate "$LR" \
-    --lambda_fuse 1.0 --lambda_view 1.0 --lambda_pseudo_loss "$LPL" \
-    --annealing_epoch "$ANNEAL_VAL" \
-    --resolution_list "$RES" \
-    --batch_size "$BATCH_SIZE" --train_epochs "$EPOCHS_VAL" --patience "$PATIENCE_VAL" \
-    --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD_VAL" \
-    --d_model "$D_MODEL" --d_ff "$D_FF" --n_heads "$N_HEADS" \
-    --nodedim "$NODEDIM" --gpu "$GPU" --swa \
-    --seed "$SEED" \
-    --save_uncertainty --uncertainty_dir "$EVI_DIR" \
-    2>&1 | grep -E "(Validation results|Test results|Saved uncertainty|SUMMARY|SUMMARY STATISTICS)" || true
+    --learning_rate '$LR' \
+    --lambda_fuse 1.0 --lambda_view 1.0 --lambda_pseudo_loss '$LPL' \
+    --annealing_epoch '$ANNEAL_VAL' \
+    --resolution_list '$RES' \
+    --batch_size '$BATCH_SIZE' --train_epochs '$EPOCHS_VAL' --patience '$PATIENCE_VAL' \
+    --e_layers '$E_LAYERS' --dropout '$DROPOUT' --weight_decay '$WD_VAL' \
+    --d_model '$D_MODEL' --d_ff '$D_FF' --n_heads '$N_HEADS' \
+    --nodedim '$NODEDIM' --gpu '$GPU' --swa \
+    --seed '$SEED' \
+    --save_uncertainty --uncertainty_dir '$EVI_DIR' \
+    2>&1 | grep -E '(Validation results|Test results|Saved uncertainty|SUMMARY|SUMMARY STATISTICS)' || true"
 
   # --- 2) 训练并保存不确定性数组：Softmax基线（不启用DS） ---
   SOFT_DIR="$OUT_BASE/$DS/softmax"
   mkdir -p "$SOFT_DIR"
-  python -m MERIT.run \
-    --model MERIT --data "$DS" --root_path "$ROOT" \
-    --model_id "UNCERT-${DS}-SOFT" \
-    --learning_rate "$LR" \
-    --resolution_list "$RES" \
-    --batch_size "$BATCH_SIZE" --train_epochs "$EPOCHS_VAL" --patience "$PATIENCE_VAL" \
-    --e_layers "$E_LAYERS" --dropout "$DROPOUT" --weight_decay "$WD_VAL" \
-    --d_model "$D_MODEL" --d_ff "$D_FF" --n_heads "$N_HEADS" \
-    --nodedim "$NODEDIM" --gpu "$GPU" --swa \
-    --seed "$SEED" \
-    --save_uncertainty --uncertainty_dir "$SOFT_DIR" \
-    2>&1 | grep -E "(Validation results|Test results|Saved uncertainty|SUMMARY|SUMMARY STATISTICS)" || true
+  run_step "训练并保存不确定性（Softmax）: $DS" bash -lc "python -m MERIT.run \
+    --model MERIT --data '$DS' --root_path '$ROOT' \
+    --model_id 'UNCERT-${DS}-SOFT' \
+    --learning_rate '$LR' \
+    --resolution_list '$RES' \
+    --batch_size '$BATCH_SIZE' --train_epochs '$EPOCHS_VAL' --patience '$PATIENCE_VAL' \
+    --e_layers '$E_LAYERS' --dropout '$DROPOUT' --weight_decay '$WD_VAL' \
+    --d_model '$D_MODEL' --d_ff '$D_FF' --n_heads '$N_HEADS' \
+    --nodedim '$NODEDIM' --gpu '$GPU' --swa \
+    --seed '$SEED' \
+    --save_uncertainty --uncertainty_dir '$SOFT_DIR' \
+    2>&1 | grep -E '(Validation results|Test results|Saved uncertainty|SUMMARY|SUMMARY STATISTICS)' || true"
 
   # --- 3) 指标与图：单方法（可靠度图/选择性预测） ---
-  python -m MERIT.scripts.evaluate_uncertainty --uncertainty_dir "$EVI_DIR" --dataset_name "$DS" --output_dir "$OUT_BASE/$DS/plots_evi" --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' --reject_rate 20 || true
-  python -m MERIT.scripts.evaluate_uncertainty --uncertainty_dir "$SOFT_DIR" --dataset_name "$DS" --output_dir "$OUT_BASE/$DS/plots_soft" --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' --reject_rate 20 || true
+  run_step "可视化与指标（EviMR）: $DS" bash -lc "python -m MERIT.scripts.evaluate_uncertainty --uncertainty_dir '$EVI_DIR' --dataset_name '$DS' --output_dir '$OUT_BASE/$DS/plots_evi' --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' --reject_rate 20 || true"
+  run_step "可视化与指标（Softmax）: $DS" bash -lc "python -m MERIT.scripts.evaluate_uncertainty --uncertainty_dir '$SOFT_DIR' --dataset_name '$DS' --output_dir '$OUT_BASE/$DS/plots_soft' --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' --reject_rate 20 || true"
 
   # --- 4) 叠加比较：准确率-拒绝率曲线 & 不确定性分布 ---
-  python -m MERIT.scripts.compare_selective --base_dir "$OUT_BASE/$DS" --dataset "$DS" --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' || true
-  python -m MERIT.scripts.make_uncert_density --base_dir "$OUT_BASE/$DS" --dataset "$DS" || true
+  run_step "叠加比较（选择性 & 分布）: $DS" bash -lc "python -m MERIT.scripts.compare_selective --base_dir '$OUT_BASE/$DS' --dataset '$DS' --palette 'e1d89c,e1c59c,e1ae9c,e1909c,4a4a4a' || true"
+  run_step "不确定性密度图: $DS" bash -lc "python -m MERIT.scripts.make_uncert_density --base_dir '$OUT_BASE/$DS' --dataset '$DS' || true"
 
   # --- 5) 案例库增强（导出高/低u Top-k，含SNR与视图冲突指标） ---
-  python -m MERIT.scripts.triage_enhance \
+  run_step "案例库增强（高/低u导出）: $DS" bash -lc "python -m MERIT.scripts.triage_enhance \
     --dataset "$DS" \
     --root_path "$ROOT" \
     --resolution_list "$RES" \
     --uncertainty_base "$OUT_BASE/$DS" \
     --gpu "$GPU" \
     --top_k_high 20 \
-    --top_k_low 20 || true
+    --top_k_low 20 || true"
 
   # --- 5.1) 决策曲线（临床收益 vs 拒绝率） ---
-  python -m MERIT.scripts.decision_curve \
+  run_step "决策曲线: $DS" bash -lc "python -m MERIT.scripts.decision_curve \
     --base_dir "$OUT_BASE/$DS" \
     --dataset "$DS" \
     --cost_fp 1.0 --cost_fn 2.0 --cost_review 0.2 --human_acc 0.98 \
-    --out_dir "$OUT_BASE/$DS" || true
+    --out_dir "$OUT_BASE/$DS" || true"
 
   # --- 5.2) 性能–延迟–显存三线图 ---
-  python -m MERIT.scripts.perf_profile \
+  run_step "性能–延迟–显存: $DS" bash -lc "python -m MERIT.scripts.perf_profile \
     --dataset "$DS" \
     --root_path "$ROOT" \
     --resolution_list "$RES" \
     --gpu "$GPU" \
     --out_dir "$OUT_BASE/$DS/perf" \
-    --batches "16,32,64,128" || true
+    --batches "16,32,64,128" || true"
 
   # --- 6) 案例图（高/低不确定度各Top-6） ---
-  python -m MERIT.scripts.plot_cases \
+  run_step "案例图（高/低不确定度Top-6）: $DS" bash -lc "python -m MERIT.scripts.plot_cases \
     --dataset "$DS" \
     --root_path "$ROOT" \
     --resolution_list "$RES" \
     --uncertainty_base "$OUT_BASE/$DS" \
     --top_k_high 6 \
     --top_k_low 6 \
-    --gpu "$GPU" || true
+    --gpu "$GPU" || true"
 
   # --- 7) 高区分度样本（按真实类 Top-K 最大 margin） ---
-  python -m MERIT.scripts.select_margin_cases \
+  run_step "高区分度样本筛选: $DS" bash -lc "python -m MERIT.scripts.select_margin_cases \
     --dataset "$DS" \
     --root_path "$ROOT" \
     --resolution_list "$RES" \
     --uncertainty_base "$OUT_BASE/$DS" \
     --gpu "$GPU" \
     --top_k_per_class 3 \
-    --correct_only || true
-  python -m MERIT.scripts.plot_cases \
+    --correct_only || true"
+  run_step "绘制高区分度案例图: $DS" bash -lc "python -m MERIT.scripts.plot_cases \
     --dataset "$DS" \
     --root_path "$ROOT" \
     --resolution_list "$RES" \
     --uncertainty_base "$OUT_BASE/$DS" \
     --index_csv "$OUT_BASE/$DS/cases/triage_margin.csv" \
     --num_from_csv 12 \
-    --gpu "$GPU" || true
+    --gpu "$GPU" || true"
 }
 
 # ===================== 主程序 =====================
-for DS in APAVA PTB PTB-XL; do
+for DS in $DATASETS_ORDER; do
   run_one_dataset "$DS"
 done
 
