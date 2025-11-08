@@ -1,12 +1,12 @@
 """Quick launcher for running MERIT ablation variants across datasets.
 
-This script wraps `multi_seed_run.py` to sequentially execute the five default
-ablation variants (full model, w/o evidential fusion, w/o pseudo-view,
+This script wraps `multi_seed_run.py` to sequentially execute the default
+ablation variants (w/o evidential fusion, w/o pseudo-view,
 w/o frequency branch, w/o difference branch) on each dataset you specify.
 
 Key features
 ------------
-- Supports multiple datasets in one command (default: APAVA, PTB, PTB-XL, ADFD-Sample).
+- Supports multiple datasets in one command (default: PTB, PTB-XL).
 - Caps training epochs via `--max_epochs` (default 80) and patience via
   `--patience` (default 10) to speed up quick sweeps.
 - Allows custom dataset root paths using `--root_paths`, e.g.
@@ -31,26 +31,8 @@ from datetime import datetime
 
 
 DATASET_CONFIGS = {
-    "APAVA": {
-        "default_root": "/home/Data1/zbl/dataset/APAVA",
-        "lr": 1.1e-4,
-        "annealing_epoch": 50,
-        "e_layers": 4,
-        "dropout": 0.1,
-        "weight_decay": 0.0,
-        "nodedim": 10,
-        "batch_size": 64,
-        "resolution_list": "2,4,6,8",
-        "lambda_pseudo_loss": 0.30,
-        "lambda_fuse": 1.0,
-        "lambda_view": 1.0,
-        "lambda_pseudo": 1.0,
-        "swa": True,
-        "default_epochs": 150,
-        "patience": 20,
-    },
     "PTB": {
-        "default_root": "/home/Data1/zbl/dataset/PTB/PTB",
+        "default_root": "/home/Data1/zbl/dataset/PTB",
         "lr": 1.0e-4,
         "annealing_epoch": 50,
         "e_layers": 4,
@@ -68,7 +50,7 @@ DATASET_CONFIGS = {
         "patience": 20,
     },
     "PTB-XL": {
-        "default_root": "/home/Data1/zbl/dataset/PTB-XL/PTB-XL",
+        "default_root": "/home/Data1/zbl/dataset/PTB-XL",
         "lr": 2.0e-4,
         "annealing_epoch": 50,
         "e_layers": 4,
@@ -82,18 +64,13 @@ DATASET_CONFIGS = {
         "lambda_view": 1.0,
         "lambda_pseudo": 1.0,
         "swa": True,
-        "default_epochs": 100,
+        "default_epochs": 150,
         "patience": 20,
     }
 }
 
 
 VARIANTS = {
-    "full": {
-        "label": "Full Model",
-        "extra_args": [],
-        "disable_ds": False,
-    },
     "wo_evi": {
         "label": "w/o Evidential Fusion",
         "extra_args": ["--agg", "mean", "--no_pseudo"],
@@ -225,7 +202,7 @@ def main():
     parser.add_argument(
         '--variants',
         type=str,
-        default='full,wo_evi,wo_pseudo,wo_freq,wo_diff',
+        default='wo_evi,wo_pseudo,wo_freq,wo_diff',
         help="Comma-separated ablation variants to execute"
     )
     parser.add_argument(
@@ -236,7 +213,7 @@ def main():
     )
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--seeds', type=str, default='41,42')
-    parser.add_argument('--max_epochs', type=int, default=80, help='Upper bound of epochs for each dataset')
+    parser.add_argument('--max_epochs', type=int, default=150, help='Upper bound of epochs for each dataset')
     parser.add_argument('--patience', type=int, default=10, help='Upper bound of early stopping patience')
     parser.add_argument('--output_dir', type=str, default='results/ablation_all_quick')
     parser.add_argument('--dry_run', action='store_true', help='Only print commands without executing')
