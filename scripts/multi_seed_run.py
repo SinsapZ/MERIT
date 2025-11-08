@@ -72,6 +72,10 @@ def main():
     parser.add_argument("--lambda_evi", type=float, default=1.0)
     parser.add_argument("--lambda_pseudo", type=float, default=1.0)
     parser.add_argument("--agg", type=str, default="evi")
+    # Ablation toggles (pass-through to MERIT.run)
+    parser.add_argument("--no_pseudo", action="store_true", default=False, help="disable pseudo-view branch")
+    parser.add_argument("--no_freq", action="store_true", default=False, help="disable frequency branch")
+    parser.add_argument("--no_diff", action="store_true", default=False, help="disable difference branch")
     
     # Multi-seed configuration
     parser.add_argument("--seeds", type=str, default="41,42,43,44,45", help="Comma-separated list of seeds")
@@ -135,6 +139,14 @@ def main():
             
             if args.use_evi_loss:
                 cmd.append('--use_evi_loss')
+            
+            # pass-through ablation knobs
+            if args.no_pseudo:
+                cmd.append('--no_pseudo')
+            if args.no_freq:
+                cmd.append('--no_freq')
+            if args.no_diff:
+                cmd.append('--no_diff')
 
             print(f'\n{"="*60}')
             print(f'Running seed {seed}...')
