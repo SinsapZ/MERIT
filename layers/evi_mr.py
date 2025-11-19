@@ -22,9 +22,6 @@ class EviMR(nn.Module):
         self.pseudo_reduce = nn.Conv1d(in_channels=d_model * self.res_num, out_channels=d_model, kernel_size=1, padding=0, stride=1, bias=True)
         self.pseudo_head = nn.Linear(d_model, self.num_classes)
 
-        if self.agg == 'attention':
-            self.att_proj = nn.Linear(d_model, 1)
-
     def forward(self, x):
         feat_list = []
         weights = []
@@ -63,23 +60,11 @@ class EviMR(nn.Module):
             alpha_a = self._ds_combin(alphas)
             return alpha_a, alphas
         else:
-            if self.agg == 'attention':
-                # Attention-based fusion
-                pooled_views = [feat.mean(dim=2) for feat in feat_list]
-                if self.use_pseudo:
-                    pooled_views.append(pooled_pseudo)
-                # Stack: (B, num_views, d_model)
-                pooled_stack = torch.stack(pooled_views, dim=1)
-                # Compute attention scores: (B, num_views, 1)
-                att_scores = self.att_proj(pooled_stack)
-                # Softmax to get weights: (B, num_views)
-                weights = F.softmax(att_scores, dim=1).squeeze(-1)
+            weights = torch.clamp(weights, min=1e-6)
+            if self.agg == 'evi':
+                weights = weights / torch.sum(weights, dim=1, keepdim=True)
             else:
-                weights = torch.clamp(weights, min=1e-6)
-                if self.agg == 'evi':
-                    weights = weights / torch.sum(weights, dim=1, keepdim=True)
-                else:
-                    weights = torch.full_like(weights, 1.0 / weights.shape[1])
+                weights = torch.full_like(weights, 1.0 / weights.shape[1])
             feats = torch.stack(feat_list + ([pseudo_feat] if self.use_pseudo else []), dim=-1)
             weights = weights.unsqueeze(1).unsqueeze(1)
             out = torch.sum(feats * weights, dim=-1)

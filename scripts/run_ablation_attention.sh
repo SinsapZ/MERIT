@@ -21,6 +21,8 @@ case $DATASET in
         DROPOUT=0.2
         LR=1e-4
         EPOCHS=150
+        LAM_PSEUDO=0.3
+        ANNEAL=50
         ;;
     "PTB-XL")
         ROOT_PATH="/home/Data1/zbl/dataset/PTB-XL"
@@ -29,6 +31,8 @@ case $DATASET in
         DROPOUT=0.1
         LR=2e-4
         EPOCHS=100
+        LAM_PSEUDO=0.3
+        ANNEAL=50
         ;;
     "PTB")
         ROOT_PATH="/home/Data1/zbl/dataset/PTB"
@@ -36,7 +40,9 @@ case $DATASET in
         RESOLUTION_LIST="2,4,6,8"
         DROPOUT=0.1
         LR=1.5e-4
-        EPOCHS=120
+        EPOCHS=150
+        LAM_PSEUDO=0.2
+        ANNEAL=40
         ;;
     *)
         echo "Unknown dataset"
@@ -64,8 +70,8 @@ python -m MERIT.scripts.multi_seed_run \
   --agg attention \
   --lambda_fuse 1.0 \
   --lambda_view 1.0 \
-  --lambda_pseudo_loss 0.3 \
-  --annealing_epoch 50 \
+  --lambda_pseudo_loss $LAM_PSEUDO \
+  --annealing_epoch $ANNEAL \
   --evidence_dropout 0.0 \
   --e_layers $E_LAYERS \
   --dropout $DROPOUT \
