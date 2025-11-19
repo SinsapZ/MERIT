@@ -260,6 +260,68 @@ class Exp_Classification(Exp_Basic):
             else:
                 self.model.load_state_dict(torch.load(model_path, map_location='cuda' if self.args.use_gpu else 'cpu'))
 
+        # Latency Measurement
+        if getattr(self.args, 'measure_latency', False):
+            try:
+                from tqdm import tqdm
+            except ImportError:
+                def tqdm(x, **kwargs): return x
+            
+            print("="*50)
+            print(f"Measuring Inference Latency...")
+            mc_dropout = getattr(self.args, 'mc_dropout', 0)
+            if mc_dropout > 0:
+                print(f"Mode: MC-Dropout (iterations={mc_dropout})")
+                self.model.train() # Enable dropout
+            else:
+                print(f"Mode: Standard Inference (EviMR-Net/Single Pass)")
+                self.model.eval()
+
+            # Warmup
+            print("Warming up GPU...")
+            with torch.no_grad():
+                for i, (batch_x, label, padding_mask) in enumerate(test_loader):
+                    if i >= 10: break
+                    batch_x = batch_x.float().to(self.device)
+                    padding_mask = padding_mask.float().to(self.device)
+                    if mc_dropout > 0:
+                        for _ in range(mc_dropout):
+                            _ = self.model(batch_x, padding_mask, None, None)
+                    else:
+                        _ = self.model(batch_x, padding_mask, None, None)
+            
+            torch.cuda.synchronize()
+            
+            # Measurement
+            print("Measuring...")
+            latencies = []
+            with torch.no_grad():
+                for batch_x, label, padding_mask in tqdm(test_loader, desc='Measuring Latency'):
+                    batch_x = batch_x.float().to(self.device)
+                    padding_mask = padding_mask.float().to(self.device)
+                    
+                    start_time = time.time()
+                    
+                    if mc_dropout > 0:
+                        for _ in range(mc_dropout):
+                            _ = self.model(batch_x, padding_mask, None, None)
+                    else:
+                        _ = self.model(batch_x, padding_mask, None, None)
+                        
+                    torch.cuda.synchronize()
+                    end_time = time.time()
+                    latencies.append((end_time - start_time) * 1000) # ms
+
+            avg_latency = np.mean(latencies)
+            std_latency = np.std(latencies)
+            
+            print("-" * 30)
+            print(f"Batch Size: {self.args.batch_size}")
+            print(f"Average Latency: {avg_latency:.2f} ms/batch")
+            print(f"Std Dev: {std_latency:.2f} ms")
+            print("="*50)
+            return # Stop here if measuring latency
+
         criterion = self._select_criterion()
         vali_loss, val_metrics = self.vali(vali_data, vali_loader, criterion)
         test_loss, test_metrics = self.vali(test_data, test_loader, criterion)
