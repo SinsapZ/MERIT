@@ -51,8 +51,8 @@ DATASET_CONFIGS = {
     },
     "PTB-XL": {
         "default_root": "/home/Data1/zbl/dataset/PTB-XL",
-        "lr": 2.0e-4,
-        "annealing_epoch": 50,
+        "lr": 1.5e-4,
+        "annealing_epoch": 15,
         "e_layers": 4,
         "dropout": 0.1,
         "weight_decay": 0.0,
@@ -64,8 +64,8 @@ DATASET_CONFIGS = {
         "lambda_view": 1.0,
         "lambda_pseudo": 1.0,
         "swa": True,
-        "default_epochs": 150,
-        "patience": 20,
+        "default_epochs": 40,
+        "patience": 10,
     }
 }
 

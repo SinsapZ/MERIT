@@ -1,44 +1,41 @@
 # MERIT 实验脚本使用指南
 
-## 📁 核心脚本（9个）
+## 核心脚本（9个）
 
-### 1️⃣ `multi_seed_run.py` ⭐核心
-多随机种子实验运行器，自动统计Mean±Std。
+### 1. `multi_seed_run.py`
+多随机种子实验运行器，自动统计 Mean±Std。
 
-### 2️⃣ `find_best_params.sh` ⭐调参
-快速搜索最佳超参数（3×3×3=27个配置，2-3小时）
+### 2. `find_best_params.sh`
+超参数搜索（3×3×3=27 个配置）
 
-### 3️⃣ `run_all_datasets.sh` ⭐主实验
-一键运行4个数据集的完整实验（用最佳配置）
+### 3. `run_all_datasets.sh`
+一键运行 3 个数据集（APAVA, PTB, PTB-XL）的完整实验
 
-### 4️⃣ `run_baselines.sh` ⭐对比
-统一运行 **MedGNN、iTransformer、FEDformer、ECGFM、ECGFounder、FORMED**（按数据集自动裁剪，支持 APAVA/PTB/PTB-XL），并生成日志、CSV。
+### 4. `run_baselines.sh`（可选）
+统一运行 MedGNN / iTransformer / FEDformer / ECGFM / ECGFounder / FORMED（按数据集自动裁剪，支持 APAVA / PTB / PTB-XL），并生成日志与 CSV。
 
-### 5️⃣ `run_ablation.sh` ⭐消融
-5个变体消融实验（证明各组件有效性）
+### 5. `run_ablation.sh`
+5 个变体消融实验
 
-### 6️⃣ `summarize_all_datasets.py` ⭐汇总
-生成论文表格（LaTeX格式）
+### 6. `summarize_all_datasets.py`
+结果汇总（含 LaTeX 输出）
 
-### 7️⃣ `evaluate_uncertainty.py` ⭐ESWA核心
-不确定性评估：ECE, Selective Prediction等
+### 7. `evaluate_uncertainty.py`
+不确定性评估（ECE、Selective Prediction 等）
 
-### 8️⃣ `analyze_uncertainty.py` ⭐ESWA分析
-全面不确定性分析：噪声鲁棒性、分布、拒绝实验、案例
+### 8. `analyze_uncertainty.py`
+不确定性分析（噪声鲁棒性、分布、拒绝实验、案例）
 
-### 9️⃣ `README.md` + `QUICK_GUIDE.md`
+### 9. `README.md` + `QUICK_GUIDE.md`
 使用文档
 
 ---
 
-## 🚀 完整实验流程（4步）
+## 实验流程（4 步）
 
-### Step 0: 超参数搜索（先做这个！）⭐
+### Step 0: 超参数搜索
 
 ```bash
-cd /home/Data1/zbl
-
-# 为每个数据集找最佳参数（2-3小时/数据集）
 bash MERIT/scripts/find_best_params.sh APAVA 0
 bash MERIT/scripts/find_best_params.sh ADFD-Sample 0
 bash MERIT/scripts/find_best_params.sh PTB 0
@@ -51,61 +48,63 @@ cat results/param_search/PTB/best_config.txt
 cat results/param_search/PTB-XL/best_config.txt
 ```
 
-**搜索空间**:
+搜索空间：
 - 学习率: 1e-4, 1.5e-4, 2e-4
 - Lambda_view: 0.5, 1.0, 1.5
 - Lambda_pseudo: 0.2, 0.3, 0.5
 
-**时间**: 约10小时（4个数据集）
-
 ---
 
-## 🚀 然后三步完成主实验
+## 然后三步完成主实验
 
-### Step 1: 用最佳配置更新 run_all_datasets.sh
+### Step 1: 用最佳配置更新 `run_all_datasets.sh`
+根据 `best_config.txt`，修改 `run_all_datasets.sh` 中各数据集的参数。
 
-根据`best_config.txt`，修改`run_all_datasets.sh`中各数据集的参数。
-
----
-
-### Step 2: 运行完整实验 (6-8小时)
+### Step 2: 运行完整实验
 
 ```bash
 bash MERIT/scripts/run_all_datasets.sh
 ```
 
-**输出**: 4个数据集 × 10 seeds × 5指标
+输出：3 个数据集 × 10 seeds × 5 指标
 
----
+### Step 3: Baseline 对比
 
-### Step 3: Baseline对比 (4小时)
+使用各项目官方的多数据集脚本：
 
-```bash
-bash MERIT/scripts/run_baselines.sh APAVA
-bash MERIT/scripts/run_baselines.sh PTB
-bash MERIT/scripts/run_baselines.sh PTB-XL
-```
+- iTransformer（支持 `--with_swa`）：
+  ```bash
+  python -m iTransformer.scripts.run_ecg_subject_all \
+    --datasets APAVA,PTB,PTB-XL \
+    --apava_root dataset/APAVA \
+    --ptb_root dataset/PTB \
+    --ptbxl_root dataset/PTB-XL \
+    --gpu 0 --seeds 3 \
+    --out_dir results/iTransformer_final_all_datasets \
+    --with_swa
+  ```
+- MedGNN：
+  ```bash
+  python -m MedGNN.scripts.run_subject_all \
+    --datasets APAVA,PTB,PTB-XL \
+    --apava_root dataset/APAVA \
+    --ptb_root dataset/PTB \
+    --ptbxl_root dataset/PTB-XL \
+    --gpu 0 --num_seeds 3 \
+    --out_dir results/MedGNN_final_all_datasets
+  ```
 
-> **环境提示**
+> 依赖提示
 > - MedGNN / iTransformer：需要 `MedGNN/MedGNN` 仓库及依赖。
-> - FEDformer：需要 `FEDformer/FEDformer` 仓库，默认使用原作者的长序列预测脚本。
-> - ECGFM：默认读取 `ECGFM/checkpoint/last_11597276.ckpt`（如存在）或官方 `ecg_fm/mimic_iv_ecg_physionet_pretrained.pt`，并复用我们现有的 MERIT 数据 loader。
-> - FORMED：若 TimesFM 只有 `model.safetensors`，脚本会自动调用 `convert_timesfm_checkpoint.py` 转为 `.pth` 并缓存。
-> - 以上脚本一次跑 3 个种子（41/42/43），结果写入 `results/baselines/<DATASET>/`。
+>   - iTransformer 的 ECG 分类脚本在 `iTransformer/scripts/run_ecg_subject_all.py`（支持 `--with_swa`）。
+>   - MedGNN 的 ECG 多数据集脚本在 `MedGNN/scripts/run_subject_all.py`。
+> - FEDformer：需要 `FEDformer/FEDformer` 仓库。
+> - ECGFM：默认读取 `ECGFM/checkpoint/last_11597276.ckpt`（如存在）或官方 `ecg_fm/mimic_iv_ecg_physionet_pretrained.pt`。
+> - FORMED：若 TimesFM 只有 `model.safetensors`，脚本会自动转换为 `.pth` 并缓存。
 
 ---
 
-### Step 4: 生成论文表格 (1分钟)
-
-```bash
-python MERIT/scripts/summarize_all_datasets.py
-```
-
-**输出**: LaTeX表格，直接用于论文
-
----
-
-## 📊 各数据集配置（已优化）
+## 数据集与默认配置（参考）
 
 | Dataset | lr | epochs | 其他关键参数 |
 |---------|-----|--------|--------------|
@@ -114,58 +113,48 @@ python MERIT/scripts/summarize_all_datasets.py
 | PTB | 1.5e-4 | 120 | wd=0, λ_pseudo_loss=0.2, anneal=40 |
 | PTB-XL | 1.5e-4 | 120 | wd=0, λ_pseudo=0.3, anneal=40 |
 
-**注**: 配置已在脚本中设置好
+注：最终以脚本内参数为准，可按需调整。
 
 ---
 
-## 🎯 ESWA投稿要点
+## 消融实验（快速版）
 
-### 核心创新
-1. 多视角证据融合 (DS理论)
-2. 不确定性量化 (MedGNN缺失)
-3. Pseudo-view机制
-
-### 关键卖点: Selective Prediction
-
-| Coverage | MERIT | MedGNN |
-|----------|-------|--------|
-| 100% | 77% | 82.6% |
-| 70% | ~84% | 82.6% ← **超越** |
-
-**论文角度**: 不确定性感知的医疗AI系统，支持人机协作
-
----
-
-## 📋 ESWA完整实验清单
-
-### 必做实验（8个）
-
-1. ✅ **4个数据集性能** - `run_all_datasets.sh`
-2. ✅ **Baseline对比** - `run_baselines.sh` (MedGNN, iTransformer, FEDformer, ECGFM, ECGFounder, FORMED)
-3. ✅ **消融实验** - `run_ablation.sh` / `run_ablation_ptb.sh` (5个变体)
-4. ✅ **ECE校准** - `evaluate_uncertainty.py`
-5. ✅ **Selective Prediction** - `evaluate_uncertainty.py`
-6. ✅ **不确定性分布** - `analyze_uncertainty.py`
-7. ✅ **拒绝实验** - `analyze_uncertainty.py`
-8. ✅ **案例可视化** - `analyze_uncertainty.py`
-
-### 可选实验（增强）
-
-9. ⭐ 噪声鲁棒性实验
-10. ⭐ OOD检测实验
+- 一键多数据集（APAVA, PTB, PTB-XL），较少轮次：
+```bash
+python -m MERIT.scripts.run_ablation_all \
+  --datasets APAVA,PTB,PTB-XL \
+  --root_paths APAVA=dataset/APAVA,PTB=dataset/PTB/PTB,PTB-XL=dataset/PTB-XL/PTB-XL \
+  --gpu 0 \
+  --seeds 41,42 \
+  --max_epochs 80 \
+  --patience 10
+```
+- 变体：Full / w/o Evidential Fusion (`--agg mean --no_pseudo`) / w/o Pseudo-view (`--no_pseudo --lambda_pseudo_loss 0.0`) / w/o Frequency (`--no_freq`) / w/o Difference (`--no_diff`)
+- 输出：`results/ablation_all_quick/<DATASET>/<variant>.csv`
 
 ---
 
-## ⏱️ 完整时间规划
+## 不确定性实验（导出与分析）
 
-| 任务 | 脚本 | 时间 |
-|------|------|------|
-| 超参数搜索 | find_best_params.sh | 10小时 |
-| 主实验(4数据集) | run_all_datasets.sh | 8小时 |
-| Baseline对比 | run_baselines.sh | 4小时 |
-| 消融实验(PTB) | run_ablation_ptb.sh | 4小时 |
-| 不确定性评估 | evaluate/analyze_uncertainty.py | 2小时 |
-| **总计** | - | **~28小时** |
+- 训练并导出（EviMR 与 Softmax）见 `QUICK_GUIDE.md` 示例。
+- 仅评估导出（复用已训练 checkpoint）：
+```bash
+python -m MERIT.scripts.multi_seed_run \
+  --root_path dataset/APAVA \
+  --data APAVA \
+  --gpu 0 \
+  --train_epochs 150 --patience 20 \
+  --e_layers 4 --dropout 0.1 --nodedim 10 \
+  --resolution_list 2,4,6,8 \
+  --seeds "41,42,43" \
+  --eval_only
+```
+- 评估与对比：`evaluate_uncertainty.py` 与 `compare_selective.py`
 
-**写论文**: 2周
+---
+
+## 参考与说明
+
+- 外部依赖仓库请根据其官方 README 安装配置（MedGNN、iTransformer、FEDformer、ECGFM、FORMED 等）。
+- 本仓库脚本默认以 GPU 单卡运行，数据集根目录与超参数可按项目需求调整。
 

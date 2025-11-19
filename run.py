@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser.add_argument('--resolution_list', type=str, default="2,4,6,8")
     parser.add_argument('--nodedim', type=int, default=10)
     parser.add_argument("--no_pseudo", action="store_true", default=False, help="disable pseudo-view in evidential fusion")
-    parser.add_argument("--agg", type=str, default="evi", choices=["evi", "mean"], help="fusion: evidential weighting or simple mean")
+    parser.add_argument("--agg", type=str, default="evi", choices=["evi", "mean", "attention"], help="fusion: evidential weighting, simple mean, or attention")
     parser.add_argument("--lambda_pseudo", type=float, default=1.0, help="scaling factor for pseudo-view weight")
     parser.add_argument("--evidence_act", type=str, default="softplus", choices=["softplus", "relu"], help="activation for evidence head")
     parser.add_argument("--evidence_dropout", type=float, default=0.0, help="dropout before evidence head")
@@ -40,6 +40,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_evi_loss", action="store_true", default=False, help="add evidential KL regularization to prior")
     parser.add_argument("--lambda_evi", type=float, default=1.0, help="weight for evidential KL to uniform prior")
     parser.add_argument("--use_ds", action="store_true", default=False, help="strict ETMC-style DS fusion over Dirichlet alphas")
+    parser.add_argument("--mc_dropout", type=int, default=0, help="number of MC-Dropout iterations (0 to disable)")
     # uncertainty saving
     parser.add_argument("--save_uncertainty", action="store_true", default=False, help="save per-sample uncertainties/confidences/predictions/labels on test set")
     parser.add_argument("--uncertainty_dir", type=str, default='', help="directory to save uncertainty npy files; default: under checkpoint folder")

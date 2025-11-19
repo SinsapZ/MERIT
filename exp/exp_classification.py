@@ -282,38 +282,102 @@ class Exp_Classification(Exp_Basic):
                 all_pred = []
                 all_label = []
                 all_conf  = []
+                
+                # MC-Dropout Logic
+                mc_dropout = getattr(self.args, 'mc_dropout', 0)
+                if mc_dropout > 0:
+                    print(f"Running MC-Dropout with {mc_dropout} iterations...")
+                    # Enable dropout
+                    self.model.train()
+                
                 with torch.no_grad():
                     for batch_x, label, padding_mask in tqdm(test_loader, desc='Saving uncertainty'):
                         batch_x = batch_x.float().to(self.device)
                         padding_mask = padding_mask.float().to(self.device)
                         label = label.to(self.device)
-                        if getattr(self.args, 'use_ds', False):
-                            fused_alpha, _ = self.model(batch_x, padding_mask, None, None)
-                            alpha = fused_alpha
-                            S = torch.sum(alpha, dim=1, keepdim=True)
-                            prob = alpha / S
-                            pred = torch.argmax(prob, dim=1)
-                            conf = torch.max(alpha, dim=1).values / S.squeeze(1)  # predictive mean of predicted class
+                        
+                        if mc_dropout > 0:
+                            # MC-Dropout: Run T forward passes
+                            mc_probs = []
+                            for _ in range(mc_dropout):
+                                if getattr(self.args, 'use_ds', False):
+                                    fused_alpha, _ = self.model(batch_x, padding_mask, None, None)
+                                    S = torch.sum(fused_alpha, dim=1, keepdim=True)
+                                    prob = fused_alpha / S
+                                else:
+                                    logits, _ = self.model(batch_x, padding_mask, None, None)
+                                    prob = torch.softmax(logits, dim=1)
+                                mc_probs.append(prob.unsqueeze(0)) # (1, B, C)
+                            
+                            # Stack: (T, B, C)
+                            mc_probs = torch.cat(mc_probs, dim=0)
+                            # Mean probability: (B, C)
+                            mean_prob = mc_probs.mean(dim=0)
+                            
+                            # Uncertainty: Predictive Entropy = -sum(p * log(p))
+                            # Add epsilon to avoid log(0)
+                            entropy = -torch.sum(mean_prob * torch.log(mean_prob + 1e-10), dim=1)
+                            
+                            # For compatibility with existing code structure
+                            # We treat 'alpha' as mean_prob * K (pseudo-alpha) or just store entropy directly
+                            # Here we store entropy as 'uncertainties' later
+                            
+                            pred = torch.argmax(mean_prob, dim=1)
+                            conf = torch.max(mean_prob, dim=1).values
+                            
+                            # Store entropy in a temporary way or handle it below
+                            # Let's store mean_prob as 'alpha' (normalized) for now, 
+                            # and we will override the uncertainty calculation below.
+                            alpha = mean_prob # (B, C)
+                            
+                            # Hack: Store entropy in a separate list or use a flag
+                            # To minimize code changes, we'll calculate uncertainty here and store it
+                            batch_uncertainty = entropy
+                            
                         else:
-                            logits, _ = self.model(batch_x, padding_mask, None, None)
-                            prob = torch.softmax(logits, dim=1)
-                            # as pseudo-alpha for uncertainty only
-                            K = prob.shape[1]
-                            alpha = prob * K  # keep for u computation
-                            pred = torch.argmax(prob, dim=1)
-                            conf = torch.max(prob, dim=1).values  # max softmax prob as confidence
+                            if getattr(self.args, 'use_ds', False):
+                                fused_alpha, _ = self.model(batch_x, padding_mask, None, None)
+                                alpha = fused_alpha
+                                S = torch.sum(alpha, dim=1, keepdim=True)
+                                prob = alpha / S
+                                pred = torch.argmax(prob, dim=1)
+                                conf = torch.max(alpha, dim=1).values / S.squeeze(1)  # predictive mean of predicted class
+                                batch_uncertainty = None # Calculated later
+                            else:
+                                logits, _ = self.model(batch_x, padding_mask, None, None)
+                                prob = torch.softmax(logits, dim=1)
+                                # as pseudo-alpha for uncertainty only
+                                K = prob.shape[1]
+                                alpha = prob * K  # keep for u computation
+                                pred = torch.argmax(prob, dim=1)
+                                conf = torch.max(prob, dim=1).values  # max softmax prob as confidence
+                                batch_uncertainty = None # Calculated later
+
                         all_alpha.append(alpha.cpu())
                         all_pred.append(pred.cpu())
                         all_label.append(label.cpu())
                         all_conf.append(conf.detach().cpu())
+                        
+                        # If MC-Dropout, we already have uncertainty (entropy)
+                        if batch_uncertainty is not None:
+                            if 'all_uncertainty' not in locals():
+                                all_uncertainty = []
+                            all_uncertainty.append(batch_uncertainty.cpu())
+
                 all_alpha = torch.cat(all_alpha, dim=0).numpy()
                 all_pred = torch.cat(all_pred, dim=0).numpy()
                 all_label = torch.cat(all_label, dim=0).numpy()
                 all_conf = torch.cat(all_conf, dim=0).numpy()
-                # uncertainty u = K / sum(alpha)
-                S = all_alpha.sum(axis=1, keepdims=True)
-                K = all_alpha.shape[1]
-                uncertainties = (K / S).squeeze(1)
+                
+                if mc_dropout > 0:
+                    uncertainties = torch.cat(all_uncertainty, dim=0).numpy()
+                    print("Using MC-Dropout Predictive Entropy as uncertainty.")
+                else:
+                    # uncertainty u = K / sum(alpha)
+                    S = all_alpha.sum(axis=1, keepdims=True)
+                    K = all_alpha.shape[1]
+                    uncertainties = (K / S).squeeze(1)
+                
                 # confidences: DS -> predictive max mean; Softmax -> max prob
                 confidences = all_conf
                 out_dir = self.args.uncertainty_dir if getattr(self.args, 'uncertainty_dir', '') else os.path.join('./checkpoints', self.args.task_name, self.args.model_id, self.args.model, setting, 'uncertainty')

@@ -47,6 +47,7 @@ echo "  2. w/o Evidential Fusion (无证据融合，用简单平均)"
 echo "  3. w/o Pseudo-view (无伪视图)"
 echo "  4. w/o Freq Branch (无频域分支)"
 echo "  5. w/o Diff Branch (无差分分支)"
+echo "  6. Attention Fusion (Attention-based Fusion)"
 echo "========================================================================"
 
 # ============================================================
@@ -189,6 +190,35 @@ python -m MERIT.scripts.multi_seed_run \
   --seeds "$SEEDS" \
   --log_csv results/ablation/$DATASET/wo_diff.csv
 
+# ============================================================
+# 变体6: Attention Fusion
+# ============================================================
+echo ""
+echo "变体6: Attention Fusion"
+
+python -m MERIT.scripts.multi_seed_run \
+  --root_path $ROOT_PATH \
+  --data $DATASET \
+  --gpu $GPU \
+  --lr $LR \
+  --agg attention \
+  --lambda_fuse 1.0 \
+  --lambda_view 1.0 \
+  --lambda_pseudo_loss 0.3 \
+  --annealing_epoch 50 \
+  --evidence_dropout 0.0 \
+  --e_layers $E_LAYERS \
+  --dropout $DROPOUT \
+  --weight_decay 0 \
+  --nodedim 10 \
+  --batch_size 64 \
+  --train_epochs $EPOCHS \
+  --patience 20 \
+  --swa \
+  --resolution_list $RESOLUTION_LIST \
+  --seeds "$SEEDS" \
+  --log_csv results/ablation/$DATASET/attention_fusion.csv
+
 echo ""
 echo "========================================================================"
 echo "消融实验完成！分析结果..."
@@ -205,6 +235,7 @@ variants = [
     ('wo_pseudo', 'w/o Pseudo-view'),
     ('wo_freq', 'w/o Frequency Branch'),
     ('wo_diff', 'w/o Difference Branch'),
+    ('attention_fusion', 'Attention Fusion'),
 ]
 
 print("\n" + "="*80)

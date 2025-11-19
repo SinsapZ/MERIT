@@ -7,14 +7,14 @@ GPU=0
 
 echo "========================================================"
 echo "MERIT - 多数据集完整实验"
-echo "数据集: ADFD, APAVA, PTB, PTB-XL"
+echo "数据集: APAVA, PTB, PTB-XL"
 echo "指标: Accuracy, Precision, Recall, F1, AUROC"
 echo "========================================================"
 
 mkdir -p results/final_all_datasets
 
 # ============================================================
-# Dataset 2: APAVA (Subject-based)
+# Dataset 1: APAVA (Subject-based)
 # ============================================================
 echo ""
 echo "========================================================"
@@ -126,20 +126,18 @@ echo "结果: results/final_all_datasets/MERIT_ptbxl_results.csv"
 # ============================================================
 echo ""
 echo "========================================================"
-echo "所有数据集实验完成！"
+echo "所有数据集实验完成！(APAVA, PTB, PTB-XL)"
 echo "========================================================"
 echo ""
 echo "结果文件:"
-echo "  1. ADFD:   results/final_all_datasets/adfd_results.csv"
-echo "  2. APAVA:  results/final_all_datasets/apava_results.csv"
-echo "  3. PTB:    results/final_all_datasets/ptb_results.csv"
-echo "  4. PTB-XL: results/final_all_datasets/ptbxl_results.csv"
+echo "  1. APAVA:  results/final_all_datasets/MERIT_apava_results.csv"
+echo "  2. PTB:    results/final_all_datasets/MERIT_ptb_results.csv"
+echo "  3. PTB-XL: results/final_all_datasets/MERIT_ptbxl_results.csv"
 echo ""
 echo "Summary文件:"
-echo "  1. ADFD:   results/final_all_datasets/adfd_results_summary.txt"
-echo "  2. APAVA:  results/final_all_datasets/apava_results_summary.txt"
-echo "  3. PTB:    results/final_all_datasets/ptb_results_summary.txt"
-echo "  4. PTB-XL: results/final_all_datasets/ptbxl_results_summary.txt"
+echo "  1. APAVA:  results/final_all_datasets/MERIT_apava_results_summary.txt"
+echo "  2. PTB:    results/final_all_datasets/MERIT_ptb_results_summary.txt"
+echo "  3. PTB-XL: results/final_all_datasets/MERIT_ptbxl_results_summary.txt"
 echo ""
 echo "========================================================"
 
