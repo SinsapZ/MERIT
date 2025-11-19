@@ -295,6 +295,13 @@ class Exp_Classification(Exp_Basic):
             # Measurement
             print("Measuring...")
             latencies = []
+            # Temporarily switch to train mode if is_training=1 was forced to load model
+            # But for measurement we need correct mode
+            if mc_dropout > 0:
+                 self.model.train()
+            else:
+                 self.model.eval()
+
             with torch.no_grad():
                 for batch_x, label, padding_mask in tqdm(test_loader, desc='Measuring Latency'):
                     batch_x = batch_x.float().to(self.device)
