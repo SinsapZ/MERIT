@@ -162,6 +162,11 @@ class Exp_Classification(Exp_Basic):
         scheduler, warmup_epochs = self._select_scheduler(model_optim)
         criterion = self._select_criterion()
 
+        # Skip training if epochs=0 (For Latency Measurement)
+        if self.args.train_epochs == 0:
+            print("Skipping training (train_epochs=0)...")
+            return self.model
+
         total_params = 0
         for name, parameter in self.model.named_parameters():
             if not parameter.requires_grad:
@@ -351,6 +356,7 @@ class Exp_Classification(Exp_Basic):
                 all_pred = []
                 all_label = []
                 all_conf  = []
+                all_prob  = []
                 
                 # MC-Dropout Logic
                 mc_dropout = getattr(self.args, 'mc_dropout', 0)
@@ -398,6 +404,7 @@ class Exp_Classification(Exp_Basic):
                             # Let's store mean_prob as 'alpha' (normalized) for now, 
                             # and we will override the uncertainty calculation below.
                             alpha = mean_prob # (B, C)
+                            all_prob.append(mean_prob.detach().cpu())
                             
                             # Hack: Store entropy in a separate list or use a flag
                             # To minimize code changes, we'll calculate uncertainty here and store it
@@ -412,6 +419,7 @@ class Exp_Classification(Exp_Basic):
                                 pred = torch.argmax(prob, dim=1)
                                 conf = torch.max(alpha, dim=1).values / S.squeeze(1)  # predictive mean of predicted class
                                 batch_uncertainty = None # Calculated later
+                                all_prob.append(prob.detach().cpu())
                             else:
                                 logits, _ = self.model(batch_x, padding_mask, None, None)
                                 prob = torch.softmax(logits, dim=1)
@@ -421,6 +429,7 @@ class Exp_Classification(Exp_Basic):
                                 pred = torch.argmax(prob, dim=1)
                                 conf = torch.max(prob, dim=1).values  # max softmax prob as confidence
                                 batch_uncertainty = None # Calculated later
+                                all_prob.append(prob.detach().cpu())
 
                         all_alpha.append(alpha.cpu())
                         all_pred.append(pred.cpu())
@@ -437,6 +446,7 @@ class Exp_Classification(Exp_Basic):
                 all_pred = torch.cat(all_pred, dim=0).numpy()
                 all_label = torch.cat(all_label, dim=0).numpy()
                 all_conf = torch.cat(all_conf, dim=0).numpy()
+                all_prob = torch.cat(all_prob, dim=0).numpy()
                 
                 if mc_dropout > 0:
                     uncertainties = torch.cat(all_uncertainty, dim=0).numpy()
@@ -455,6 +465,23 @@ class Exp_Classification(Exp_Basic):
                 np.save(os.path.join(out_dir, 'confidences.npy'), confidences)
                 np.save(os.path.join(out_dir, 'predictions.npy'), all_pred)
                 np.save(os.path.join(out_dir, 'labels.npy'), all_label)
+                np.save(os.path.join(out_dir, 'probs.npy'), all_prob)
+
+                # Metrics based on saved predictions
+                labels_onehot = np.eye(self.args.num_class)[all_label.astype(int)]
+                uncertainty_acc = accuracy_score(all_label, all_pred)
+                uncertainty_prec = precision_score(all_label, all_pred, average="macro", zero_division=0)
+                uncertainty_rec = recall_score(all_label, all_pred, average="macro", zero_division=0)
+                uncertainty_f1 = f1_score(all_label, all_pred, average="macro", zero_division=0)
+                uncertainty_auroc = roc_auc_score(labels_onehot, all_prob, multi_class="ovr")
+                uncertainty_auprc = average_precision_score(labels_onehot, all_prob, average="macro")
+
+                print("[Uncertainty Eval] Accuracy: {:.5f}, Precision: {:.5f}, Recall: {:.5f}, F1: {:.5f}".format(
+                    uncertainty_acc, uncertainty_prec, uncertainty_rec, uncertainty_f1
+                ))
+                print("[Uncertainty Eval] AUROC: {:.5f}, AUPRC: {:.5f}".format(
+                    uncertainty_auroc, uncertainty_auprc
+                ))
                 print(f"Saved uncertainty arrays to: {out_dir}")
         except Exception as e:
             print(f"[warn] saving uncertainty failed: {e}")
