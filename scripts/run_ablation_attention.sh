@@ -8,7 +8,7 @@ SEEDS="41,42,43,44,45"  # 5个seeds
 
 if [ -z "$DATASET" ]; then
     echo "Usage: bash run_ablation_attention.sh <DATASET> [GPU]"
-    echo "Recommended: PTB-XL (ECG) or ADFD-Sample (EEG)"
+    echo "Recommended: PTB-XL (ECG), PTB (ECG), or ADFD-Sample (EEG)"
     exit 1
 fi
 
@@ -29,6 +29,14 @@ case $DATASET in
         DROPOUT=0.1
         LR=2e-4
         EPOCHS=100
+        ;;
+    "PTB")
+        ROOT_PATH="/home/Data1/zbl/dataset/PTB"
+        E_LAYERS=4
+        RESOLUTION_LIST="2,4,6,8"
+        DROPOUT=0.1
+        LR=1.5e-4
+        EPOCHS=120
         ;;
     *)
         echo "Unknown dataset"
