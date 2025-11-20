@@ -345,7 +345,6 @@ class Exp_Classification(Exp_Basic):
         # optional: save per-sample uncertainty for downstream plotting
         try:
             if getattr(self.args, 'save_uncertainty', False):
-                import numpy as np
                 try:
                     from tqdm import tqdm  # optional
                 except Exception:
